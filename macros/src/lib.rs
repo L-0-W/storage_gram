@@ -2,7 +2,6 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, parse_macro_input};
 
-
 #[proc_macro_derive(StoreTable)]
 pub fn derive_store_table(input: TokenStream) -> TokenStream {
 
@@ -30,7 +29,34 @@ pub fn derive_store_table(input: TokenStream) -> TokenStream {
         _ => panic!("apenas funciona em structs")
     };
 
+    let display_fields = match &input.data {
+        Data::Struct(data) => match &data.fields {
+            syn::Fields::Named(campos) => {
+                let nomes_campos = campos.named.iter().map(|fi| {
+                    let field_nome = &fi.ident;
+                    
+                    quote! { 
+                        write!(f, "{}: {}\n", stringify!(#field_nome), self.#field_nome)? 
+                    }
+                });
+
+                quote! {
+                    #(#nomes_campos;)*
+                    Ok(())
+                }
+            },
+            _ => quote! {}
+        }  
+        _ => panic!("Não e uma estrutura")
+    };
+
     let expanded = quote! {
+        impl fmt::Display for #nome {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                #display_fields
+            }
+        }
+
         impl StoreTableTrait for #nome {
             fn get_filds() -> Vec<(Arc<str>, Arc<str>)> {
                 #campos

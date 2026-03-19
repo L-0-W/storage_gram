@@ -2,12 +2,10 @@ mod store_gram;
 mod types;
 mod manager;
 
-use std::sync::{Arc};
-
+use std::{io, time::Duration};
 use store_gram::{Store};
-use store_macros::StoreTable;
-use types::{TelegramAPP, StoreTableTrait};
-
+use types::{TelegramAPP};
+use store_gram::macros::*;
 
 #[derive(StoreTable)]
 #[allow(unused)]
@@ -48,7 +46,21 @@ async fn main(){
         println!("{:?}", table)
     }
    
+    loop {
 
-    let value = User {nome: "Luiz".to_string(), idade: 10};
-    store.lock().await.insert::<User>(value).await;
+        let mut buffer = String::new();
+
+        io::stdin().read_line(&mut buffer).expect("could not read lines");
+
+        println!("{}", buffer);
+        if buffer.contains("send") { 
+            let value = User {nome: "Luiz".to_string(), idade: 10};
+            store.lock().await.insert::<User>(value).await;
+        } else {
+            continue;
+        }
+
+
+        std::thread::sleep(Duration::from_secs(5));
+    }
 }

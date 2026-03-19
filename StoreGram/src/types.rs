@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use grammers_client::InvocationError;
 use grammers_tl_types::{self as tl};
 

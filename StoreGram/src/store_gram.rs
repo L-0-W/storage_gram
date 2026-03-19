@@ -328,7 +328,7 @@ impl Store {
         table_names
     }
 
-    pub async fn insert<T: StoreTableTrait>(&mut self, _value_to_insert: T) {
+    pub async fn insert<T: StoreTableTrait + std::fmt::Display>(&mut self, value_to_insert: T) {
        if self.table_exist::<T>() {
 
             let table_name = T::get_struct();
@@ -337,7 +337,12 @@ impl Store {
                 Channel::Channel(_) => {
                     let topic_peer = self.database.tables_peer.get(table_name).unwrap();
 
-                    let message = InputMessage::new().text("a").reply_to(Some(*topic_peer));
+                    println!("{}", T::get_filds()[0].0);
+                    let message = InputMessage::new()
+                        .text(format!("{}", value_to_insert))
+                        .reply_to(Some(*topic_peer));
+
+                    println!("{}", value_to_insert);
                     
                     match &self.database.channel {
                         Channel::Channel(channel) => {
@@ -358,100 +363,10 @@ impl Store {
 }
 
 
-// use core::panic;
-// use std::{io, sync::Arc};
-
-// use grammers_client::{Client, InvocationError, client::{self, LoginToken}};
-// use grammers_mtsender::SenderPool;
-// use grammers_session::{storages::SqliteSession, types::{PeerId, PeerRef}};
-// use grammers_tl_types::{self as tl, types::PeerChat};
-
-
-// type Result = std::result::Result<(), Box<dyn std::error::Error>>;
-
-// pub async fn async_main() -> Result {
-//     let session = Arc::new(SqliteSession::open("./session").await?);
-
-//     println!("CRIANDO SENDERPOOL");
-//     let SenderPool {
-//         runner,
-//         updates,
-//         handle,
-//     } = SenderPool::new(Arc::clone(&session), 29750333);
+pub mod  macros {
+    pub use std::fmt;
+    pub use std::sync::Arc;
+    pub use crate::types::StoreTableTrait;
+    pub use store_macros::StoreTable;
     
-//     let client = Client::new(handle.clone());
-
-//     tokio::spawn(async move {
-//          runner.run().await;
-//     });
-   
-
-    
-//     if !client.is_authorized().await? {
-//         println!("BUSCANDO TOKEN DE USUARIO");
-
-//         let token = match client.request_login_code("+5532998602810", "3aa9ede81264c73813f1885f5ff23382").await {
-//             Ok(token) => token,
-//             _ => panic!("ERRO"), 
-//         };
-
-//         let mut code: String = String::new();
-    
-//         println!("Digite o codigo que chegou");
-//         io::stdin().read_line(&mut code).unwrap();
-
-//         let user: grammers_client::peer::User = client.sign_in(&token, &code.trim()).await.unwrap();
-        
-//         let chat: PeerRef = user.to_ref().await.unwrap();
-//         client.send_message(chat, "Logado com sucesso").await.unwrap();
-//     }
-
-
-//     let user = client.get_me().await.unwrap();
-//     let chat = user.to_ref().await.unwrap();
-//     client.send_message(chat, format!("{} ja esta logado em sessão", user.username().unwrap())).await?;
-    
-
-//     let request = tl::functions::channels::CreateChannel {
-//         broadcast: false,
-//         megagroup: true,
-//         forum: true,
-//         for_import: false,
-//         title: "Groupo criado por bot".to_string(),
-//         about: "Nada d+".to_string(),
-//         geo_point: None,
-//         address: None,
-//         ttl_period: None
-//     };
-
-//     let updates = client.invoke(&request).await.unwrap();
-    
-//     if let tl::enums::Updates::Updates(u) = updates {
-//         for chat in u.chats {
-//             match chat {
-//                 tl::enums::Chat::Channel(c) => {
-
-//                     let forum_input = tl::types::InputPeerChannel{
-//                         channel_id: c.id,
-//                         access_hash: c.access_hash.unwrap(),
-//                     };
-
-//                     let create_topic = grammers_tl_types::functions::messages::CreateForumTopic {
-//                         title_missing: false,
-//                         title: "Users".to_string(),
-//                         icon_color: None,
-//                         icon_emoji_id: None,
-//                         random_id: rand::random::<i64>(),
-//                         peer: forum_input.into(),
-//                         send_as: None
-//                     };
-
-
-//                     client.invoke(&create_topic).await.unwrap();
-//                 }
-//                 _ => eprintln!("ERRO"),
-//             }
-//         }
-//     }
-//     Ok(())
-// }
+}
