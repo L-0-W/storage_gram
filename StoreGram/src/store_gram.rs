@@ -1,8 +1,11 @@
 use std::{collections::hash_map::Values, io, sync::Arc};
 
+use grammers_client::peer::Peer;
 use grammers_client::{Client, InvocationError, SenderPool, message::InputMessage, peer::User};
 use grammers_session::{storages::SqliteSession};
-use grammers_tl_types::types::{InputChannel};
+use grammers_tl_types::enums::messages::ForumTopics;
+use grammers_tl_types::enums::{ForumTopic, InputPeer, Message, MessageFwdHeader};
+use grammers_tl_types::types::{InputChannel, InputPeerChannel};
 
 use crate::manager::{File, SearchResult};
 use crate::types::{Channel, Database, ResultErrs, StoreTableTrait, TelegramAPP};
@@ -66,7 +69,6 @@ impl Store {
         
         return Ok(return_obj);
     }
-
 
     #[allow(unused)]
     pub async fn connect_from_session(app: TelegramAPP, sesion_path: &str) -> Result<Self> {
@@ -221,6 +223,54 @@ impl Store {
 
     }
 
+    pub async fn get(&self) {
+        let (channel_id, acess_has) = match &self.database.channel {
+            Channel::Channel(c) => {
+                (Some(c.id), c.access_hash)
+            }
+            _ => { (None, None) }
+        };
+        
+        let topics = self.database.tables_peer.values()
+            .map(|item| *item)
+            .collect::<Vec<i32>>();
+        
+        let myi = InputPeer::Channel(InputPeerChannel{
+            channel_id: channel_id.unwrap(),
+            access_hash: acess_has.unwrap()
+        });
+        
+        let request= tl::functions::messages::GetForumTopicsById {
+            peer: myi,
+            topics: topics
+        };
+        
+        let abc = self.client.invoke(&request).await.unwrap();
+        
+        match abc {
+            ForumTopics::Topics(c) => {
+                for idx in 0..c.messages.len() {
+                    let msg = match &c.messages[idx] {
+                        Message::Message(m) => {
+                            Some(&m.message)
+                        }
+                        _ => { Some(&"Não tem".to_string() ) }
+                    };
+
+                    let topic = match &c.topics[idx] {
+                        ForumTopic::Topic(to) => {
+                            Some(&to.title)
+                        }
+                        _ => { None }
+                    };
+
+                    println!("TOPIC: {}\n ------- \n MESSAGE: {}", topic.unwrap(), msg.unwrap());
+                }
+                
+            },
+        }
+    }
+
     pub async fn create_table<G: StoreTableTrait>(this: Arc<tokio::sync::Mutex<Self>>) -> Option<ResultErrs> {
         let handler = tokio::task::spawn(async move {
             let mut guard = this.lock().await;
@@ -292,7 +342,7 @@ impl Store {
                                                 tl::enums::MessageAction::TopicCreate(_) => {
                                                     if service.from_id.is_some() {
                                                         let _ = &self.database.tables_peer.insert(Arc::from(struct_name), service.id);
-                                                        
+                                                    
                                                         let fields_str = fields.iter()
                                                             .map(|item| {
                                                                 String::from(format!("{}: {}", item.0, item.1))

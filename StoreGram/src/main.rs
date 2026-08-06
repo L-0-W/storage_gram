@@ -53,13 +53,20 @@ async fn main(){
         io::stdin().read_line(&mut buffer).expect("could not read lines");
 
         println!("{}", buffer);
-        if buffer.contains("send") { 
+        
+        if buffer.contains("user") { 
             let value = User {nome: "Luiz".to_string(), idade: 10};
             store.lock().await.insert::<User>(value).await;
-        } else {
-            continue;
+        } 
+
+        if buffer.contains("games") {
+            let value = Games { path: "./re9".to_string(), price: 90 };
+            store.lock().await.insert::<Games>(value).await;
         }
 
+        if buffer.contains("get") {
+            store.lock().await.get().await;
+        }
 
         std::thread::sleep(Duration::from_secs(5));
     }
