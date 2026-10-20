@@ -554,11 +554,16 @@
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".search-wrap")) searchPop.hidden = true;
   });
+  function isTextField(el) {
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+  }
   document.addEventListener("keydown", (event) => {
-    if (event.key === "/" && document.activeElement !== searchEl) {
-      event.preventDefault();
-      searchEl.focus();
-    }
+    if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+    if (isTextField(document.activeElement)) return;
+    event.preventDefault();
+    searchEl.focus();
   });
 
   menuBtn.addEventListener("click", () => {
