@@ -599,7 +599,8 @@
         {
           label: "Criar",
           title: "CreateChannel com forum ligado",
-          html: `<p>Título <code>UserDB</code>, about <code>database</code>, <code>forum: true</code>, <code>megagroup: false</code>, <code>broadcast: false</code>. Erro de invoke é impresso e devolvido como <code>Err</code>. O <code>main</code> faz <code>unwrap</code> nesse Result.</p>`,
+          html: `<p>O pedido é <code>channels.createChannel</code>. O título é o argumento de <code>create_db</code>, aqui <code>UserDB</code>. O about é a string <code>database</code>. Os flags são <code>broadcast: false</code>, <code>megagroup: false</code> e <code>forum: true</code>. <code>broadcast: false</code> deixa de lado o canal de anúncio. <code>forum: true</code> pede as abas de tópico. <code>megagroup</code> é o supergrupo, e um fórum no Telegram é supergrupo com tópicos. O fonte manda o fórum ligado e o supergrupo desligado. O script apagado no commit <code>salvando</code> usava <code>megagroup: true</code>.</p>
+          <p>Se <code>invoke</code> devolver erro, a função imprime o <code>InvocationError</code> e devolve <code>Err</code>. O <code>main</code> faz <code>unwrap</code> nesse <code>Result</code>, então o processo encerra nessa falha. A alteração a testar nesse caso é <code>megagroup: true</code>, com <code>forum: true</code> e <code>broadcast: false</code> como estão.</p>`,
           state: st({
             channel: "UserDB",
             mem: [["RPC", "channels.createChannel"]],
@@ -774,7 +775,9 @@
         {
           label: "Print",
           title: "Título e texto são alinhados pela posição no vetor",
-          html: `<p>O loop vai de <code>0</code> até <code>messages.len()</code> e lê <code>topics[idx]</code> na mesma posição. Se um vetor vier mais curto, entra em panic. Serviço vira o texto <code>Não tem</code>. O <code>unwrap</code> do título também entra em panic se a variante não for <code>ForumTopic::Topic</code>.</p>${code("stdout provável", "TOPIC: User\n ------- \nMESSAGE: Não tem")}`,
+          html: `<p>O <code>for</code> usa o tamanho de <code>c.messages</code> e lê <code>c.topics[idx]</code> na mesma posição. As duas listas precisam ter o mesmo comprimento. Se <code>topics</code> for mais curta, <code>topics[idx]</code> encerra o processo.</p>
+          <p>Quando o item é <code>Message::Message</code>, o texto impresso é <code>m.message</code>. A mensagem que criou o tópico é de serviço, variante diferente, e cai no braço que produz a string <code>Não tem</code>. Esse braço faz <code>&amp;\"Não tem\".to_string()</code>: cria um <code>String</code> temporário e guarda a referência em <code>msg</code>. O <code>cargo check</code> diz se o compilador aceita esse temporário. A página Pontas soltas mostra a substituição com uma variável <code>fallback</code> que vive até o <code>println!</code>.</p>
+          <p>O título sai de <code>ForumTopic::Topic</code>. Outra variante vira <code>None</code>, e o <code>unwrap</code> encerra o processo. O stdout, com os três tópicos criados pelo <code>main</code>, fica neste formato para cada um:</p>${code("stdout provável", "TOPIC: User\n ------- \nMESSAGE: Não tem")}`,
           state: st({
             channel: "UserDB",
             mem: [["stdout", "TOPIC + Não tem, por tópico"]],
@@ -993,17 +996,17 @@
           id: "termos",
           title: "Palavra no fonte",
           html: `<div class="glossary">
-            <article><b>base / database</b><span>O banco. No Telegram é um canal com fórum. No disco é uma linha de <code>schema.base</code>.</span></article>
-            <article><b>table</b><span>A tabela. No Telegram é um tópico. No disco é uma linha de <code>schema.table</code>.</span></article>
-            <article><b>peer em schema.base</b><span>O <code>channel_id</code>, um <code>i64</code>. Não é o tópico.</span></article>
-            <article><b>peer em schema.table</b><span>O id da mensagem que criou o tópico. Cabe em <code>i32</code> no mapa <code>tables_peer</code>.</span></article>
-            <article><b>access_hash</b><span>O outro número, obrigatório para montar <code>InputPeer</code>. Grafado <code>acess_hash</code> no parâmetro de <code>insert_base</code>.</span></article>
-            <article><b>get_filds</b><span>O método da trait. A grafia sem o “e” é a que a macro gera. Não é um bug solto: é o nome da API interna.</span></article>
-            <article><b>StoreTable</b><span>O derive. Implementa a trait e o <code>Display</code>.</span></article>
-            <article><b>ResultErrs::Ok</b><span>Sucesso de <code>create_table</code>. Não é o <code>Ok</code> do <code>Result</code> da std.</span></article>
-            <article><b>session.gram</b><span>Sessão SQLite do grammers. Auth da conta. Não é o schema.</span></article>
-            <article><b>reply_to</b><span>No insert, o jeito de publicar dentro do tópico: responder a mensagem raiz dele.</span></article>
-            <article><b>runner</b><span>A task de rede do <code>SenderPool</code>. Sem ela o <code>Client</code> não envia.</span></article>
+            <article><b>base / database</b><span>É o banco inteiro. No <code>main</code> o nome é <code>UserDB</code>. No Telegram isso vira um canal com fórum, criado por <code>channels.createChannel</code>. No disco, <code>schema.base</code> guarda uma linha <code>UserDB|id do canal|access hash</code>. <code>Database</code> na memória guarda esse canal no campo <code>channel</code>, e também os mapas das tabelas.</span></article>
+            <article><b>table</b><span>É uma tabela dentro do banco. No demo, <code>User</code>, <code>Images</code> e <code>Games</code>. No Telegram cada uma é um tópico do fórum, criado por <code>messages.createForumTopic</code>, com o título igual ao nome da struct. No disco, <code>schema.table</code> guarda uma linha por tabela: nome, lista de campos, e o id do tópico.</span></article>
+            <article><b>peer em schema.base</b><span>A segunda coluna de <code>schema.base</code>. O parâmetro em <code>insert_base</code> se chama <code>peer</code>, e o valor escrito é <code>c.id</code> do canal, um <code>i64</code>. Nas chamadas seguintes esse número entra em <code>InputChannel.channel_id</code> e em <code>InputPeerChannel.channel_id</code>. O id do tópico mora na outra arquivo, <code>schema.table</code>.</span></article>
+            <article><b>peer em schema.table</b><span>A terceira coluna de <code>schema.table</code>. É o <code>service.id</code> da mensagem de serviço <code>TopicCreate</code>, o número que o Telegram usa como identidade do tópico. <code>table_exist</code> faz <code>parse::<i32></code> e guarda em <code>tables_peer</code>. O <code>insert</code> coloca esse mesmo número em <code>reply_to</code> para a mensagem nascer dentro do tópico.</span></article>
+            <article><b>access_hash</b><span>O segundo número do canal, ao lado do <code>channel_id</code>. A API do Telegram exige os dois para montar <code>InputPeerChannel</code> e <code>InputChannel</code>. <code>create_db</code> grava os dois em <code>schema.base</code>. O parâmetro de <code>insert_base</code> está escrito <code>acess_hash</code>, sem o segundo “c”. Perder esse número impede reabrir o canal, mesmo com o id ainda em mãos.</span></article>
+            <article><b>get_filds</b><span>Método da trait <code>StoreTableTrait</code>. A macro gera esse nome exatamente assim, sem o “e” de fields. Ele devolve <code>Vec&lt;(Arc&lt;str&gt;, Arc&lt;str&gt;)&gt;</code>: cada par é o nome do campo e o tipo, os dois como texto, por exemplo <code>(\"nome\", \"String\")</code>. <code>telegram_create_table</code> junta esses pares na string que vai para <code>schema.table</code>. Mudar a grafia do método pede mudar a trait e a macro no mesmo commit.</span></article>
+            <article><b>StoreTable</b><span>O derive <code>#[derive(StoreTable)]</code>, implementado em <code>macros/src/lib.rs</code> pela função <code>derive_store_table</code>. Para uma struct com campos nomeados ele gera duas coisas: <code>impl Display</code>, que escreve <code>campo: valor</code> em cada linha, e <code>impl StoreTableTrait</code>, com <code>get_filds</code> e <code>get_struct</code>. <code>User</code>, <code>Images</code> e <code>Games</code> usam esse derive no <code>main.rs</code>.</span></article>
+            <article><b>ResultErrs::Ok</b><span>Variante de sucesso do enum <code>ResultErrs</code>, devolvida por <code>telegram_create_table</code> quando o tópico foi criado e o id foi guardado. O nome coincide com o <code>Ok</code> da std, e o tipo é outro: a função devolve <code>Option&lt;ResultErrs&gt;</code>, então o sucesso chega como <code>Some(ResultErrs::Ok)</code>. O <code>expect</code> do <code>main</code> olha só se o <code>Option</code> está preenchido.</span></article>
+            <article><b>session.gram</b><span>Arquivo SQLite que o grammers cria em <code>SqliteSession::open(\"./session.gram\")</code>. Depois do primeiro <code>sign_in</code>, a autorização da conta fica nesse arquivo. Na execução seguinte, <code>is_authorized</code> lê essa autorização e <code>get_me</code> substitui o pedido de código. O schema dos bancos e das tabelas fica em <code>schema.base</code> e <code>schema.table</code>.</span></article>
+            <article><b>reply_to</b><span>Campo de <code>InputMessage</code> usado no <code>insert</code>. O valor é o id do tópico, <code>Some(*topic_peer)</code>. No fórum do Telegram, uma mensagem que responde a mensagem raiz do tópico é publicada dentro desse tópico. O <code>send_message</code> recebe o canal do banco como chat, e o <code>reply_to</code> escolhe a aba. Sem esse número, a mensagem iria para o chat geral do canal.</span></article>
+            <article><b>runner</b><span>A metade de rede do <code>SenderPool</code> no grammers 0.9. <code>SenderPool::new</code> devolve <code>runner</code>, <code>handle</code> e <code>updates</code>. <code>Client::new(handle)</code> é a fachada que o resto do código chama. <code>runner.run()</code> sobe numa task e fica lendo e escrevendo o socket. Sem essa task, <code>invoke</code> e <code>send_message</code> ficam sem quem entregue o pacote. O campo <code>updates</code> é descartado com <code>_</code>.</span></article>
           </div>`,
         },
       ],
@@ -1057,12 +1060,10 @@
         {
           id: "nao",
           title: "O que este modelo não tem",
-          html: `<ul>
-            <li>Tipo de coluna de verdade. O tipo é a string que <code>stringify!</code> viu no compile, por exemplo <code>String</code> ou <code>u8</code>. Ninguém valida o valor contra isso na hora do insert.</li>
-            <li>Chave, índice, update, delete, transação.</li>
-            <li>Mais de um banco ao mesmo tempo. <code>Database</code> guarda um canal só. Criar outro nome substitui <code>database.channel</code> e deixa o anterior só no arquivo, se a linha antiga não for a que a busca encontra primeiro.</li>
-            <li>Arquivo. A linha é texto. O tamanho <code>u8</code> de <code>Images.size</code> é da demo, não um plano de chunk.</li>
-          </ul>`,
+          html: `<p>O tipo do campo existe como texto. A macro faz <code>stringify!</code> do tipo escrito na struct, então <code>idade</code> fica registrado como a string <code>u8</code> e <code>nome</code> como a string <code>String</code>. Na hora do <code>insert</code> o programa formata o valor com <code>Display</code> e envia esse texto. A palavra <code>u8</code> no <code>schema.table</code> é o registro do que foi declarado. Quem impede um número acima de 255 é o tipo <code>u8</code> da struct, na compilação, quando você escreve o valor no Rust.</p>
+          <p>Cada <code>insert</code> acrescenta uma mensagem nova. Duas gravações do Luiz são duas bolhas no mesmo tópico, com o mesmo texto. Atualizar o texto de uma mensagem já enviada, apagar essa mensagem, ou buscar uma linha por um id próprio, são o próximo ciclo em cima desse acréscimo. O arquivo de hoje termina no envio.</p>
+          <p><code>Database.channel</code> guarda um canal. <code>create_db</code> com outro nome substitui esse campo pelo canal novo. A linha antiga permanece em <code>schema.base</code>. <code>search_base</code> devolve a primeira linha cujo nome bate. Se você criar <code>UserDB</code> de novo depois de apagar o arquivo, nasce outro canal, e o canal anterior continua na conta, fora do índice.</p>
+          <p>A linha que viaja hoje é texto. <code>Images.size</code> é <code>u8</code>, de 0 a 255, porque a struct é demonstração. O tamanho em bytes de um arquivo passa disso no primeiro quilobyte. O comentário <code>send_file</code> no fim de <code>store_gram.rs</code> é o nome da função que ainda vai mandar documento. A página Como retomar descreve o manifesto de ids que essa função precisa para juntar os pedaços de volta.</p>`,
         },
       ],
     },
@@ -1093,7 +1094,8 @@
       lead: "create_db ou reabre o canal anotado em schema.base, ou cria um canal fórum e anota.",
       sections: [
         { id: "player", title: "Passo a passo", html: `<div data-flow="createdb"></div>` },
-        { id: "flag", title: "O flag do fórum", html: `<p>A chamada atual passa <code>megagroup: false</code> junto com <code>forum: true</code>. O script que foi apagado no último commit usava <code>megagroup: true</code>, que é o formato de supergrupo com tópicos. Se ao retomar o <code>CreateChannel</code> recusar o pedido, alinhar esse flag com o experimento antigo é o teste mais curto.</p>` },
+        { id: "flag", title: "O flag do fórum", html: `<p><code>channels.createChannel</code> recebe três booleanos que escolhem o tipo do chat. <code>broadcast: true</code> seria um canal de anúncio. <code>megagroup: true</code> é um supergrupo, o grupo em que as pessoas escrevem. <code>forum: true</code> liga as abas de tópico. Um fórum, no Telegram, é supergrupo com essas abas, então o par que cria tópicos é <code>megagroup: true</code> junto com <code>forum: true</code>.</p>
+          <p>O <code>create_db</code> atual manda <code>broadcast: false</code>, <code>megagroup: false</code> e <code>forum: true</code>. O script que o commit <code>salvando</code> apagou do fim de <code>store_gram.rs</code> criava o canal com <code>megagroup: true</code> e <code>forum: true</code>. Se esta chamada imprimir <code>InvocationError</code> e o <code>unwrap</code> do <code>main</code> encerrar o processo, a alteração a testar é <code>megagroup: true</code>, mantendo <code>forum: true</code> e <code>broadcast: false</code>. A página Pontas soltas repete o pedido completo e o que cada flag significa.</p>` },
       ],
     },
     {
@@ -1122,7 +1124,8 @@
       lead: "get foi o último acréscimo. Ele pergunta a ficha dos tópicos. As mensagens que o insert enviou ficam de fora.",
       sections: [
         { id: "player", title: "Passo a passo", html: `<div data-flow="get"></div>` },
-        { id: "leitura", title: "O que uma leitura de linha precisaria", html: `<p>Histórico do canal filtrado pelo reply do tópico, ou uma busca, e um jeito de separar a mensagem de serviço do texto das linhas. O índice local não ajuda: ele não guarda id de mensagem de dados. Enquanto isso não existir, o REPL <code>get</code> não devolve Luiz.</p>` },
+        { id: "leitura", title: "O que falta para o terminal mostrar o Luiz", html: `<p>Depois de digitar <code>user</code>, a mensagem com <code>nome: Luiz</code> e <code>idade: 10</code> está no tópico, como resposta ao id guardado em <code>tables_peer</code>. <code>get</code> pede <code>messages.getForumTopicsByID</code>. Essa chamada devolve o título e a mensagem de serviço que criou o tópico. O texto do Luiz é uma mensagem posterior, e a resposta dessa chamada deixa esse texto de fora. O braço do <code>match</code> para mensagem de serviço imprime <code>Não tem</code>.</p>
+          <p>A leitura da linha usa o mesmo canal e o mesmo id de tópico, numa chamada que peça as respostas dessa mensagem. <code>messages.getReplies</code>, com o peer do canal e <code>msg_id</code> igual ao id do tópico, devolve os posts do tópico. Em cada <code>Message::Message</code>, <code>m.message</code> é o texto que o <code>Display</code> gerou. A mensagem de serviço <code>TopicCreate</code> entra nessa lista como criação do tópico, e a impressão das linhas a pula. <code>schema.table</code> guarda o id do tópico, que é o endereço da pasta. O id de cada linha continua só no Telegram, dentro dessa lista de respostas. A página Como retomar escreve essa troca no lugar do <code>get</code> atual.</p>` },
       ],
     },
     {
@@ -1329,42 +1332,71 @@
       id: "erros",
       kicker: "Referência",
       title: "Pontas soltas",
-      lead: "Comportamentos que mudam o que o programa faz de verdade, separados do que ele parece fazer pelo nome da função.",
+      lead: "Cada item abaixo é um trecho concreto do fonte, com o que ele faz quando você roda o programa e o que escrever no lugar quando for mexer.",
       sections: [
         {
-          id: "leitura",
-          title: "Leitura e listagem",
-          html: `<ul>
-            <li><code>get</code> não lê linhas. Lê a ficha do tópico e, no caso comum, imprime <code>Não tem</code>.</li>
-            <li><code>show_db_tables</code> itera os valores do mapa de campos. O nome da tabela não aparece.</li>
-            <li><code>insert</code> sem tabela conhecida volta em silêncio.</li>
-            <li>O <code>expect</code> do <code>main</code> em <code>create_table</code> só vê <code>None</code>. <code>TableAlreadyExist</code> e os outros status seguem o programa.</li>
-          </ul>`,
+          id: "get-texto",
+          title: "get imprime Não tem depois de um insert",
+          html: `<p>Você sobe o programa, digita <code>user</code> e aperta Enter. <code>insert</code> manda para o tópico User uma mensagem cujo texto é <code>nome: Luiz</code> na primeira linha e <code>idade: 10</code> na segunda. Em seguida você digita <code>get</code>. O terminal imprime o título do tópico e a palavra <code>Não tem</code>. O texto do Luiz continua no Telegram, e esta função não o pediu.</p>
+          <p><code>Store::get</code>, em <code>store_gram.rs</code> por volta da linha 226, monta a chamada <code>messages.getForumTopicsByID</code>. O argumento <code>topics</code> é a lista de ids que está em <code>tables_peer</code>. A resposta traz duas listas: <code>topics</code>, com o título de cada tópico, e <code>messages</code>, com a mensagem que abriu aquele tópico. A mensagem que abre um tópico é uma mensagem de serviço, da ação <code>TopicCreate</code>. Ela descreve a criação do tópico. Ela é outra mensagem, anterior, diferente da mensagem de texto que o <code>insert</code> enviou depois.</p>
+          <p>O <code>match</code> em <code>c.messages[idx]</code> só lê o campo <code>message</code> quando a variante é <code>Message::Message</code>, que é mensagem comum com texto. A mensagem de serviço cai no outro braço, e esse braço coloca a string fixa <code>Não tem</code>. Por isso o stdout depois de gravar o Luiz é este:</p>
+          ${code("stdout de get", "TOPIC: User\n ------- \nMESSAGE: Não tem")}
+          <p>Para o terminal mostrar a linha gravada, a função precisa de uma segunda chamada, que peça as mensagens publicadas dentro do tópico. <code>messages.getReplies</code> faz isso: o <code>peer</code> é o canal UserDB e o <code>msg_id</code> é o mesmo número guardado em <code>tables_peer</code>, o id da mensagem <code>TopicCreate</code>. As respostas a essa mensagem são os posts do tópico, inclusive o texto do <code>Display</code>. <code>messages.getHistory</code> no canal, filtrando quem tem <code>reply_to</code> igual a esse id, chega no mesmo conjunto. Em cada item <code>Message::Message</code>, o campo <code>m.message</code> é a linha. Mensagens de serviço dessa lista são a criação do tópico, e ficam de fora da impressão das linhas.</p>`,
+        },
+        {
+          id: "temporario",
+          title: "O braço Não tem e o cargo check",
+          html: `<p>O braço que produz <code>Não tem</code> está escrito assim:</p>
+          ${code("store_gram.rs, dentro de get", "let msg = match &c.messages[idx] {\n    Message::Message(m) => {\n        Some(&m.message)\n    }\n    _ => { Some(&\"Não tem\".to_string()) }\n};")}
+          <p>No primeiro braço, <code>m.message</code> é um <code>String</code> que já vive dentro da mensagem devolvida pela API. Essa mensagem está em <code>c</code>, e <code>c</code> continua viva até o fim da função. O <code>&amp;</code> aponta para um texto que já tem dono. Esse braço é um empréstimo comum.</p>
+          <p>No segundo braço, <code>\"Não tem\".to_string()</code> cria um <code>String</code> novo no meio da expressão. Nenhuma variável guarda esse <code>String</code>. O Rust chama isso de temporário. Um temporário é destruído no fim da instrução que o criou. Aqui a instrução é o <code>let msg = ...;</code>. O tipo de <code>msg</code> é uma referência, <code>Option&lt;&amp;String&gt;</code>. No segundo braço essa referência aponta para o temporário. Quando o ponto e vírgula passa, o temporário pode já ter sido destruído, e <code>msg</code> apontaria para memória liberada. O compilador recusa isso. O erro típico fala em temporary value dropped while borrowed.</p>
+          <p>Algumas versões novas do compilador alongam a vida desse temporário até o fim do bloco em que <code>msg</code> é usado. Por isso o mesmo fonte pode compilar numa toolchain e falhar em outra. <code>cargo check</code>, rodado na raiz do workspace, é o que diz em qual dos dois casos você está. Ele analisa o código e mostra o erro. O executável quem gera é <code>cargo build</code> ou <code>cargo run</code>.</p>
+          <p>A forma estável é dar um dono ao texto antes do <code>match</code>, e emprestar esse dono. <code>fallback</code> vive até o fim do bloco. O <code>println!</code> usa <code>msg_text</code> enquanto <code>fallback</code> ainda existe.</p>
+          ${code("substituição do match", "let fallback = String::from(\"Não tem\");\nlet msg_text: &str = match &c.messages[idx] {\n    Message::Message(m) => m.message.as_str(),\n    _ => fallback.as_str(),\n};")}
+          <p>O primeiro braço também muda de <code>&amp;String</code> para <code>&amp;str</code>, via <code>as_str()</code>. Os dois braços passam a ter o mesmo tipo, e o <code>println!</code> recebe <code>msg_text</code>. O título do tópico continua no outro <code>match</code>, o de <code>c.topics[idx]</code>. Esse match devolve <code>Some</code> quando a variante é <code>ForumTopic::Topic</code>, e <code>None</code> nas outras. O <code>unwrap</code> logo abaixo encerra o processo quando recebe <code>None</code>. O loop anda pelo tamanho de <code>messages</code> e lê <code>topics</code> na mesma posição. Se a lista de tópicos vier mais curta que a de mensagens, <code>topics[idx]</code> também encerra o processo.</p>`,
+        },
+        {
+          id: "megagroup",
+          title: "create_db pede um fórum com megagroup desligado",
+          html: `<p><code>create_db</code> cria o canal com este pedido, em <code>store_gram.rs</code> dentro de <code>channels::CreateChannel</code>:</p>
+          ${code("flags atuais", "broadcast: false,\nmegagroup: false,\nforum: true,")}
+          <p>Cada flag escolhe um formato de chat. <code>broadcast: true</code> seria um canal de anúncio, em que a maior parte das pessoas só lê. Com <code>false</code>, o pedido deixa esse formato de lado. <code>megagroup: true</code> é o supergrupo, o grupo grande atual do Telegram, em que os participantes escrevem. <code>forum: true</code> pede os tópicos, as abas no topo do chat. No Telegram, um fórum é um supergrupo com essas abas, então o pedido que cria tópicos leva os dois ligados: <code>megagroup: true</code> e <code>forum: true</code>.</p>
+          <p>O fonte atual liga o fórum e deixa o supergrupo desligado. O script antigo, apagado no commit <code>salvando</code>, criava o canal com <code>megagroup: true</code> e <code>forum: true</code>. Se ao rodar o programa o <code>create_db</code> imprimir um <code>InvocationError</code> e o <code>unwrap</code> do <code>main</code> encerrar o processo, o pedido que falhou é esse <code>CreateChannel</code>. A primeira alteração a testar é trocar <code>megagroup</code> para <code>true</code>, manter <code>forum: true</code> e manter <code>broadcast: false</code>. O título continua sendo o nome passado para <code>create_db</code>, no demo <code>UserDB</code>, e o about continua <code>database</code>.</p>`,
+        },
+        {
+          id: "show",
+          title: "show_db_tables imprime os campos e omite o nome",
+          html: `<p>Depois de criar as três tabelas, o <code>main</code> faz um <code>for</code> em <code>show_db_tables()</code> e imprime cada item com <code>{:?}</code>. A função devolve <code>self.database.tables_fields.values()</code>. <code>values()</code> percorre o conteúdo do <code>HashMap</code>, que é o vetor de pares campo e tipo. A chave, que é o nome <code>User</code>, <code>Images</code> ou <code>Games</code>, fica de fora do iterador.</p>
+          <p>O que aparece no terminal é uma linha parecida com <code>[(\"nome\", \"String\"), (\"idade\", \"u8\")]</code>, e o mesmo formato para as outras duas structs. Para imprimir o nome junto, o iterador é <code>tables_fields.iter()</code>, que entrega a chave e o vetor. O <code>for</code> do <code>main</code> segura o mutex durante a impressão, porque o iterador empresta o <code>Store</code> que está dentro do guard.</p>`,
+        },
+        {
+          id: "expect",
+          title: "O expect de create_table deixa o erro passar",
+          html: `<p><code>create_table</code> devolve <code>Option&lt;ResultErrs&gt;</code>. <code>None</code> acontece quando a task criada com <code>tokio::spawn</code> falha no join. Qualquer status interno, inclusive <code>TableAlreadyExist</code>, <code>ErrInicializeDataBase</code>, <code>ClientNotLogged</code>, <code>ErrInvoke</code> e <code>TablePeerNotFound</code>, volta como <code>Some</code>. O <code>main</code> chama <code>.expect(\"erro ao criar table user\")</code>. <code>expect</code> em um <code>Option</code> só entra em panic quando o valor é <code>None</code>. Um <code>Some(TableAlreadyExist)</code> é sucesso para o <code>expect</code>, o programa segue, e a mensagem <code>TABLE JA EXISTE</code> já foi impressa dentro da função.</p>
+          <p>Na segunda execução esse <code>Some(TableAlreadyExist)</code> é o caminho esperado. A linha já está em <code>schema.table</code>, <code>table_exist</code> copia o id do tópico para a memória, e o Telegram fica com o tópico que já tinha sido criado. Na primeira execução, se o RPC falhar depois de <code>set_table_fields</code>, o retorno também é <code>Some</code>. O <code>main</code> segue, e a memória ficou com o nome da tabela sem o id do tópico.</p>`,
         },
         {
           id: "estado",
-          title: "Memória na frente do Telegram",
-          html: `<ul>
-            <li><code>set_table_fields</code> roda antes de <code>CreateForumTopic</code>. Uma falha de RPC deixa a tabela “existindo” sem peer. O próximo create não tenta de novo, e o insert estoura no <code>unwrap</code> do peer.</li>
-            <li><code>table_exist</code> olha só <code>tables_fields</code>. Peer ausente ainda conta como tabela existente.</li>
-            <li>Os inserts de arquivo não deduplicam. Duas gravações do mesmo nome deixam a busca presa na primeira linha.</li>
-            <li>Linha com menos de três colunas, ou inteiro inválido, entra em panic no <code>[]</code> ou no <code>parse</code>.</li>
-            <li>Erro ao ler uma linha de <code>schema.table</code> devolve <code>FileEmpty</code> e para o arquivo inteiro.</li>
-            <li>O tipo relido fica com espaço à esquerda, por causa do <code>format!(\"{}: {}\", nome, tipo)</code>.</li>
-          </ul>`,
+          title: "A memória é preenchida antes de o Telegram confirmar",
+          html: `<p>Em <code>telegram_create_table</code>, a ordem é: <code>table_exist</code>, e se for falso, <code>set_table_fields</code>, e só então <code>CreateForumTopic</code>. <code>set_table_fields</code> insere o nome da struct em <code>tables_fields</code>. <code>table_exist</code>, na próxima chamada, vê essa chave e devolve <code>true</code> sem olhar <code>tables_peer</code> e sem olhar se o tópico foi criado.</p>
+          <p>Se <code>CreateForumTopic</code> falhar, o tópico pode estar ausente e o arquivo <code>schema.table</code> ainda sem a linha, mas a memória já tem o nome. A próxima tentativa imprime <code>TABLE JA EXISTE</code> e devolve <code>TableAlreadyExist</code>. Mais tarde o <code>insert</code> faz <code>tables_peer.get(nome).unwrap()</code>. A chave do peer nunca foi inserida, o <code>get</code> devolve <code>None</code>, e o <code>unwrap</code> encerra o processo.</p>
+          <p>O ponto de conserto é mover <code>set_table_fields</code> para depois de o <code>service.id</code> ter sido guardado em <code>tables_peer</code> e a linha ter sido escrita em <code>schema.table</code>. As duas gravações passam a acontecer juntas, quando o Telegram já devolveu o id.</p>`,
+        },
+        {
+          id: "indice",
+          title: "O índice em disco aceita linha repetida e linha curta",
+          html: `<p><code>insert_base</code> e <code>insert_table</code> abrem o arquivo em append e escrevem mais uma linha. A escrita segue direto para o fim do arquivo, sem uma leitura das linhas que já estão lá. Chamar duas vezes para <code>User</code> deixa duas linhas começando com <code>User</code>. <code>search_table</code> devolve a primeira que encontrar e deixa a segunda parada no arquivo. Se a primeira estiver velha, com um id de tópico que já foi apagado no Telegram, a busca continua devolvendo esse id.</p>
+          <p>As duas buscas fazem <code>split(\"|\")</code> e leem os índices <code>[0]</code>, <code>[1]</code> e <code>[2]</code> sem medir o vetor. Uma linha com um <code>|</code> só, ou vazia, faz o índice <code>[2]</code> estourar e o processo para. O <code>parse::<i64></code> de <code>search_base</code> e o <code>parse::<i32></code> de <code>table_exist</code> usam <code>unwrap</code>. Uma coluna com letra no lugar do número, ou com espaço que o parse recusa, também encerra o processo nesse <code>unwrap</code>.</p>
+          <p>Em <code>search_table</code>, se <code>lines()</code> devolver erro numa linha, a função sai na hora com <code>SearchResult::FileEmpty</code> e deixa de ler o resto do arquivo. O nome <code>FileEmpty</code> descreve arquivo vazio. O que aconteceu foi falha ao ler uma linha. Um arquivo que existe e está vazio percorre zero linhas e cai em <code>NoItemFound</code>.</p>
+          <p>O schema é gravado com <code>format!(\"{}: {}\", nome, tipo)</code>. Isso coloca um espaço depois dos dois-pontos: <code>nome: String</code>. Na leitura, <code>split_once(\":\")</code> devolve o tipo <code>\" String\"</code>, com o espaço incluído. O laboratório na página de <code>manager.rs</code> mostra esse espaço entre aspas.</p>`,
         },
         {
           id: "rede",
-          title: "Rede, flag e runtime",
-          html: `<ul>
-            <li><code>CreateChannel</code> usa <code>megagroup: false</code> com <code>forum: true</code>. O experimento apagado usava <code>megagroup: true</code>.</li>
-            <li><code>get</code> alinha <code>messages[i]</code> com <code>topics[i]</code> e dá unwrap em título e em access_hash.</li>
-            <li>O ramo <code>\"Não tem\".to_string()</code> empresta um temporário. Confirme com <code>cargo check</code>.</li>
-            <li><code>std::thread::sleep</code> de 5 segundos roda dentro do <code>#[tokio::main]</code> e bloqueia a thread.</li>
-            <li><code>connect_from_session</code> grava <code>session_path</code> fixo no ramo do login, e ninguém chama a função.</li>
-            <li>Updates são descartados. Mensagem recebida no app não acorda o processo.</li>
-            <li>Credencial da aplicação está no fonte e no histórico. Não está coberta pelo gitignore.</li>
-          </ul>`,
+          title: "Sessão, sleep e mensagens que chegam",
+          html: `<p>O loop do <code>main</code> termina cada volta com <code>std::thread::sleep(Duration::from_secs(5))</code>. Essa espera bloqueia a thread do sistema em que o runtime do Tokio está rodando. Durante esses cinco segundos o runner de rede, que foi colocado numa task com <code>tokio::spawn</code>, disputa a mesma thread. Uma espera assíncrona, <code>tokio::time::sleep</code>, devolve a thread ao runtime enquanto o tempo passa. A espera de thread segura a thread o tempo todo.</p>
+          <p><code>connect_from_session</code> está marcada com <code>allow(unused)</code>. O <code>main</code> chama <code>Store::connect</code>, e esta outra função fica sem nenhum chamador. No ramo em que a sessão ainda pede login, o campo <code>session_path</code> gravado na struct é a string fixa <code>\"./session.gram\"</code>. O caminho recebido no argumento só entra no <code>SqliteSession::open</code>. No ramo já autorizado, o campo recebe o caminho do argumento. O parâmetro está escrito <code>sesion_path</code>. O retorno é o <code>Store</code> solto, sem <code>Arc</code> e sem mutex. <code>create_table</code> pede <code>Arc&lt;Mutex&lt;Store&gt;&gt;</code>, o mesmo embrulho que <code>connect</code> devolve. Para o <code>main</code> usar esta função, o retorno precisaria ganhar esse embrulho.</p>
+          <p><code>SenderPool::new</code> devolve também <code>updates</code>. O <code>connect</code> escreve <code>updates: _</code> e descarta esse receptor. Update é o aviso que o Telegram manda quando chega mensagem, quando alguém edita, quando um tópico é criado. Com o receptor descartado, o processo só fica sabendo o que ele mesmo pediu com <code>invoke</code> ou <code>send_message</code>. Uma mensagem digitada no aplicativo do Telegram fica no celular e no servidor, e este processo continua parado no <code>read_line</code>.</p>
+          <p><code>main.rs</code> passa <code>api_hash</code>, <code>api_id</code> e telefone direto para <code>TelegramAPP::new</code>. O <code>.gitignore</code> lista <code>session.gram</code>, <code>schema.base</code> e <code>schema.table</code>. <code>main.rs</code> entra no git, e a credencial entra com ele. O commit <code>salvando</code> apagou o script comentado no fim de <code>store_gram.rs</code>, onde havia outra cópia do telefone e do hash. O arquivo atual ficou sem essa cópia. O commit anterior continua guardando o texto antigo. A página Como retomar descreve a troca da credencial e a leitura por variável de ambiente.</p>`,
         },
       ],
     },
@@ -1372,34 +1404,54 @@
       id: "retomar",
       kicker: "Referência",
       title: "Como retomar",
-      lead: "A base que já existe é a conta, o canal e o tópico. O plano de arquivo encaixa em cima do insert, não no lugar dele.",
+      lead: "A ordem abaixo segue o que o fonte já consegue fazer. Cada passo diz qual arquivo abrir, o que está escrito lá, e o que muda quando o passo termina.",
       sections: [
         {
-          id: "ordem",
-          title: "Ordem que aproveita o que está pronto",
-          html: `<ol>
-            <li>Tirar hash, id e telefone do <code>main</code> e tratar a credencial antiga como vazada.</li>
-            <li>Rodar <code>cargo check</code> e decidir o braço de <code>get</code> que empresta o temporário, e o flag <code>megagroup</code> de <code>create_db</code>.</li>
-            <li>Separar <code>src/lib.rs</code> do binário, se a meta continua sendo uma lib. A macro já está isolada.</li>
-            <li>Fazer <code>get</code> ler histórico do tópico, senão não há como testar uma linha que você acabou de gravar.</li>
-            <li>Só então desenhar arquivo. O gancho já está nomeado no comentário <code>send_file</code> / <code>get_file</code>.</li>
-          </ol>`,
+          id: "credencial",
+          title: "Tirar a credencial de main.rs",
+          html: `<p><code>TelegramAPP</code> carrega três dados que o grammers usa no login. <code>api_id</code> é o número da aplicação, e entra em <code>SenderPool::new</code>. <code>api_hash</code> é a chave dessa aplicação, e entra em <code>request_login_code</code> junto com o telefone. O telefone diz para qual conta o Telegram manda o código. Os três estão escritos como argumentos de <code>TelegramAPP::new</code> em <code>main</code>, no começo da função. Esta documentação deixa esses argumentos de fora de propósito.</p>
+          <p>Quem clona o repositório lê os três no arquivo. Quem olha o histórico também lê: o script comentado que o commit <code>salvando</code> apagou de <code>store_gram.rs</code> tinha o mesmo telefone e o mesmo hash. Apagar a linha do <code>main</code> atual limpa a ponta do branch. O commit antigo continua com a cópia. O conserto completo é gerar outra aplicação em <code>my.telegram.org</code>, para o hash antigo deixar de valer, e fazer o binário ler os valores novos de fora do fonte.</p>
+          <p>O lugar de leitura é o começo do <code>main</code>, no lugar dos três literais. Variável de ambiente basta: o processo lê <code>api_hash</code>, <code>api_id</code> e telefone, monta o <code>TelegramAPP</code>, e segue para <code>Store::connect</code>. O arquivo <code>session.gram</code> continua sendo a sessão já autorizada. Ele está no <code>.gitignore</code> e guarda a conta depois do primeiro código. A credencial da aplicação é outra coisa: ela autoriza o programa a pedir esse código.</p>`,
+        },
+        {
+          id: "check",
+          title: "Compilar, o texto Não tem, e o flag do fórum",
+          html: `<p>Na raiz do workspace, <code>cargo check</code> analisa <code>macros</code> e <code>StoreGram</code> e mostra erro de compilação sem precisar chegar no login. Dois pontos do fonte merecem esse check antes de qualquer feature nova.</p>
+          <p>O primeiro é o braço <code>_</code> de <code>Store::get</code>. Ele faz <code>Some(&amp;\"Não tem\".to_string())</code>. Isso cria um <code>String</code> temporário e guarda uma referência para ele em <code>msg</code>. O temporário pode morrer no ponto e vírgula do <code>let</code>, e a referência ficaria pendurada. A página Pontas soltas tem o <code>match</code> inteiro e a substituição com uma variável <code>fallback</code> que vive até o <code>println!</code>. Se o <code>cargo check</code> acusar o temporário, essa substituição é a correção. Se o check passar, a substituição ainda vale a pena, porque o fonte deixa de depender de o compilador alongar a vida do temporário.</p>
+          <p>O segundo é o pedido <code>channels.createChannel</code> dentro de <code>create_db</code>. Os flags estão <code>broadcast: false</code>, <code>megagroup: false</code>, <code>forum: true</code>. Fórum no Telegram é supergrupo com tópicos, e supergrupo é <code>megagroup: true</code>. O experimento que foi apagado criava o canal com <code>megagroup: true</code> e <code>forum: true</code>. Se o programa conectar, chegar em <code>create_db(\"UserDB\")</code> e o <code>invoke</code> devolver erro, troque <code>megagroup</code> para <code>true</code> e rode de novo. O resto do pedido fica: título <code>UserDB</code>, about <code>database</code>, <code>broadcast: false</code>. Quando o canal nasce, <code>insert_base</code> grava <code>UserDB|id|access_hash</code> em <code>schema.base</code>.</p>`,
+        },
+        {
+          id: "lib",
+          title: "Separar a biblioteca do programa de demonstração",
+          html: `<p>O workspace tem dois pacotes. <code>macros</code> já é uma biblioteca: o <code>Cargo.toml</code> dele diz <code>proc-macro = true</code>, o arquivo é <code>macros/src/lib.rs</code>, e o <code>StoreGram</code> depende dele pelo path <code>../macros</code>. Essa parte está pronta para outro projeto usar o derive <code>StoreTable</code>.</p>
+          <p>O pacote <code>StoreGram</code> só tem <code>src/main.rs</code>. No Cargo, um pacote cujo único fonte é <code>main.rs</code> é um binário: <code>cargo run</code> gera um executável. Os <code>mod types;</code>, <code>mod manager;</code> e <code>mod store_gram;</code> do <code>main</code> são módulos desse executável. Um segundo programa, com o próprio <code>Cargo.toml</code>, ainda fica sem um crate de biblioteca para colocar em <code>[dependencies]</code> e escrever <code>use ...::Store</code>. <code>Store::connect</code>, <code>create_db</code>, <code>insert</code> e a trait estão compilados dentro do executável da demo.</p>
+          <p>Virar lib, aqui, é criar o segundo alvo do mesmo pacote. O arquivo novo é <code>StoreGram/src/lib.rs</code>, com os três módulos públicos:</p>
+          ${code("StoreGram/src/lib.rs", "pub mod types;\npub mod manager;\npub mod store_gram;")}
+          <p>Essas três linhas saem do <code>main.rs</code>. O <code>main.rs</code> fica com as structs <code>User</code>, <code>Images</code> e <code>Games</code>, com o <code>TelegramAPP::new</code>, com as chamadas e com o loop do teclado. Ele passa a importar <code>Store</code>, <code>TelegramAPP</code> e o módulo <code>macros</code> a partir do crate da biblioteca. O nome desse crate é o <code>name</code> do <code>StoreGram/Cargo.toml</code>. A demo continua sendo <code>cargo run -p StoreGram</code>. Um terceiro programa, no mesmo workspace ou fora, passa a depender do pacote e a chamar <code>Store::connect</code> sem copiar <code>store_gram.rs</code>.</p>
+          <p>O módulo <code>store_gram::macros</code>, que reexporta <code>Arc</code>, <code>fmt</code>, <code>StoreTableTrait</code> e o derive, continua necessário no arquivo que declara a struct. Se as structs de demo ficarem no <code>main.rs</code>, o <code>use</code> do módulo <code>macros</code> fica no <code>main.rs</code>. Se uma struct nova nascer em outro arquivo, aquele arquivo repete o mesmo <code>use</code>, porque o código gerado pela macro cita esses nomes sem caminho absoluto.</p>`,
+        },
+        {
+          id: "ler",
+          title: "Fazer get devolver a linha que o insert acabou de gravar",
+          html: `<p>Hoje o ciclo de teste manual quebra no meio. O loop aceita <code>user</code>, o <code>insert</code> envia o texto, e o <code>get</code> responde com o título do tópico e <code>Não tem</code>. A frase <code>nome: Luiz</code> aparece quando você abre o tópico User no aplicativo do Telegram. O terminal desta função mostra o título e a palavra <code>Não tem</code>.</p>
+          <p>A chamada que está em <code>get</code> é <code>messages.getForumTopicsByID</code>. Ela descreve o tópico: título, id, e a mensagem de serviço da criação. A linha é uma mensagem comum, enviada depois, com <code>reply_to</code> apontando para o id dessa mensagem de serviço. Para ler a linha, <code>get</code> usa o canal que já está em <code>database.channel</code> e o id que já está em <code>tables_peer</code>, e pede as respostas dessa mensagem.</p>
+          <p><code>messages.getReplies</code> recebe o peer do canal e <code>msg_id</code> igual ao id do tópico. A lista que volta são os posts daquele tópico. Para cada item, se a variante for <code>Message::Message</code>, o campo <code>m.message</code> é o texto. No caso do Luiz, o texto é <code>nome: Luiz</code>, quebra de linha, <code>idade: 10</code>, quebra de linha. Itens que forem mensagem de serviço são a criação do tópico, e a impressão das linhas os pula. <code>messages.getHistory</code> no mesmo canal, guardando só as mensagens cujo <code>reply_to</code> é o id do tópico, produz a mesma lista.</p>
+          <p>Com o <code>get</code> ainda nesta chamada de ficha do tópico, o próximo passo de arquivo também fica sem conferência no terminal. Um pedaço enviado seria outra mensagem no mesmo tópico, e esta função continuaria imprimindo <code>Não tem</code> até passar a pedir as respostas do tópico.</p>`,
         },
         {
           id: "arquivo",
-          title: "Onde o arquivo entraria",
-          html: `<p>O insert de hoje é o modelo: um valor vira uma mensagem no tópico, endereçada por <code>reply_to</code>. Um arquivo grande não cabe nesse texto. O encaixe que respeita o desenho atual é uma operação irmã do <code>insert</code>, no mesmo canal e no mesmo tópico, mandando documento em vez de texto.</p>
-          <p>O índice de hoje não serve para os pedaços. <code>schema.base</code> e <code>schema.table</code> guardam canal e tópico, não id de mensagem de dados. Um manifesto — uma mensagem, ou uma linha local, com a lista ordenada dos ids das partes — é a peça que não existe. Sem ela, <code>get_file</code> não tem o que remontar, do mesmo jeito que <code>get</code> hoje não acha a linha.</p>
-          <p>“Vários meios” também não está no código. Há um transporte só: a sessão de usuário e um canal. Saved Messages, outro canal, ou um bot seriam outros peers, e o <code>Database</code> atual só guarda um <code>Channel</code>. O primeiro meio já tem endereço. Os outros pediriam uma lista de peers, não um campo único.</p>
-          ${note("tip", "O que não precisa ser refeito", "Login, SenderPool, o par id/access_hash, o tópico como pasta e o reply_to como endereçamento. Isso já é a prateleira. O arquivo é o que vai em cima dela.")}`,
+          title: "Onde o envio de arquivo entra",
+          html: `<p>No fim de <code>store_gram.rs</code> há duas linhas comentadas: <code>send_file</code> e <code>get_file</code>. A segunda está escrita <code>asynnc</code>. Embaixo do comentário o arquivo termina. As duas funções ainda são só o nome. O <code>insert</code> mostra o endereço que elas reutilizam: o canal guardado em <code>database.channel</code>, e o id do tópico guardado em <code>tables_peer</code>, passado em <code>reply_to</code>. A mensagem cai dentro do tópico da tabela.</p>
+          <p>O <code>insert</code> manda texto, produzido pelo <code>Display</code>. Um arquivo é binário. O caminho correspondente no cliente é enviar um documento: o grammers sobe os bytes com o upload da API (<code>upload.saveFilePart</code> para arquivo menor, <code>upload.saveBigFilePart</code> quando passa do tamanho de um upload simples) e publica com mídia, <code>messages.sendMedia</code> ou o helper de arquivo do <code>Client</code>, no mesmo canal e com o mesmo <code>reply_to</code>. Cada pedaço vira uma mensagem de documento no tópico. A ordem dos pedaços é a ordem em que você enviou.</p>
+          <p><code>schema.base</code> guarda o canal. <code>schema.table</code> guarda o tópico e o texto dos campos. O id de cada mensagem de dado fica só no Telegram. <code>get_file</code>, para remontar o arquivo, precisa da lista ordenada desses ids. Essa lista é o manifesto. Ele pode ser um arquivo local, no mesmo estilo dos schemas, uma linha <code>nome-do-arquivo|id-do-tópico|id1,id2,id3</code>. Ele pode ser a primeira mensagem de texto do tópico, com esses ids escritos nela, e os documentos nas mensagens seguintes. <code>get_file</code> lê o manifesto, baixa cada documento na ordem dos ids, e concatena os bytes no arquivo de saída.</p>
+          <p>O código tem um destino só. <code>Database.channel</code> é um enum com uma variante preenchida: um canal. A sessão é uma conta de usuário. “Vários meios” seria mais de um destino para os pedaços, por exemplo o canal UserDB e as mensagens salvas da própria conta, que são o peer do <code>user</code> devolvido no login. Para isso o catálogo passa a guardar uma lista de peers, e cada item do manifesto registra em qual peer aquele pedaço foi. O primeiro destino, o canal fórum, já tem id, access hash e tópico. Os outros são peers a mais nessa lista.</p>
+          ${note("tip", "O que já está pronto para o arquivo", "O login, a task do runner, o par id e access hash em schema.base, o tópico como pasta em schema.table, e o reply_to como forma de publicar dentro da pasta. send_file e get_file usam esses quatro e acrescentam o upload do documento e o manifesto dos ids.")}`,
         },
         {
           id: "cuidado",
-          title: "Dois cuidados que o código atual já mostra",
-          html: `<ul>
-            <li>O mutex segura cliente e catálogo juntos, e o <code>insert</code> não solta durante o envio. Vários pedaços em sequência travam qualquer outra operação no mesmo <code>Store</code>.</li>
-            <li><code>Images.size</code> é <code>u8</code>. As structs do <code>main</code> são demo do texto. O tamanho de um pedaço de arquivo não cabe nesse campo e não precisa passar pela trait, a menos que você queira um catálogo de arquivos como tabela.</li>
-          </ul>`,
+          title: "O lock durante o envio, e o u8 da demo",
+          html: `<p>No <code>main</code>, a chamada é <code>store.lock().await.insert(...).await</code>. O guard do mutex vive até o <code>insert</code> terminar, e o <code>insert</code> só termina quando <code>send_message</code> termina. O <code>Store</code> inteiro fica emprestado durante a rede: o <code>Client</code> e o <code>Database</code> estão no mesmo objeto. Um <code>send_file</code> que mande dezenas de pedaços dentro de um único lock deixa <code>create_table</code>, <code>get</code> e outro <code>insert</code> esperando até o último pedaço voltar. O desenho que acompanha o código atual é soltar o guard entre um pedaço e o próximo, ou separar o cliente do catálogo, para a subida do arquivo usar o cliente enquanto outra tarefa lê <code>tables_peer</code>.</p>
+          <p><code>Images</code> tem <code>size: u8</code>. <code>u8</code> guarda de 0 a 255. <code>idade</code> e <code>price</code> usam o mesmo tipo, porque as três structs são demonstração de texto. O tamanho em bytes de um pedaço de arquivo passa de 255 no primeiro quilobyte. A ficha do arquivo é uma struct nova, com o nome, o tamanho em <code>u64</code> e a lista de ids de mensagem. O derive <code>StoreTable</code> serve para essa ficha do mesmo jeito que serve para <code>User</code>: gera o nome, os campos e o <code>Display</code>. O <code>Display</code> vira o texto da ficha, com nome, tamanho e ids. Os bytes de cada pedaço vão no documento anexado à mensagem.</p>`,
         },
       ],
     },
