@@ -158,6 +158,7 @@
       listEl.innerHTML = shown.length
         ? shown.map((fn) => renderFunction(fn, open && group !== "all")).join("")
         : `<p class="muted">Nenhuma função com esse filtro.</p>`;
+      wireSamples(listEl);
     }
     draw();
 
@@ -245,7 +246,7 @@
       rail.querySelectorAll("button").forEach((btn) => {
         btn.classList.toggle("active", Number(btn.dataset.step) === index);
       });
-      highlightIn(el.querySelector(".flow-copy"));
+      wireSamples(el.querySelector(".flow-copy"));
     }
     rail.addEventListener("click", (event) => {
       const btn = event.target.closest("[data-step]");
@@ -401,15 +402,12 @@
     });
   }
 
-  function mount(root) {
-    root.querySelectorAll("[data-flow]").forEach(mountFlow);
-    root.querySelectorAll("[data-fns]").forEach(mountFns);
-    root.querySelectorAll("[data-arch]").forEach(mountArch);
-    root.querySelectorAll("[data-tree]").forEach(mountTree);
-    root.querySelectorAll("[data-repl]").forEach(mountRepl);
-    root.querySelectorAll("[data-schema-lab]").forEach(mountSchema);
+  function wireSamples(root) {
+    if (!root) return;
     highlightIn(root);
     root.querySelectorAll(".copy").forEach((btn) => {
+      if (btn.dataset.bound === "1") return;
+      btn.dataset.bound = "1";
       btn.addEventListener("click", async () => {
         const code = btn.closest(".code").querySelector("code");
         const text = code.dataset.raw || code.textContent;
@@ -422,6 +420,16 @@
         setTimeout(() => { btn.textContent = "Copiar"; }, 1200);
       });
     });
+  }
+
+  function mount(root) {
+    root.querySelectorAll("[data-flow]").forEach(mountFlow);
+    root.querySelectorAll("[data-fns]").forEach(mountFns);
+    root.querySelectorAll("[data-arch]").forEach(mountArch);
+    root.querySelectorAll("[data-tree]").forEach(mountTree);
+    root.querySelectorAll("[data-repl]").forEach(mountRepl);
+    root.querySelectorAll("[data-schema-lab]").forEach(mountSchema);
+    wireSamples(root);
   }
 
   let tocObserver = null;
@@ -554,11 +562,16 @@
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".search-wrap")) searchPop.hidden = true;
   });
+  function isTextField(el) {
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+  }
   document.addEventListener("keydown", (event) => {
-    if (event.key === "/" && document.activeElement !== searchEl) {
-      event.preventDefault();
-      searchEl.focus();
-    }
+    if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+    if (isTextField(document.activeElement)) return;
+    event.preventDefault();
+    searchEl.focus();
   });
 
   menuBtn.addEventListener("click", () => {
