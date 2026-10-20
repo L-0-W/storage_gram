@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StoreGram — leitura da codebase</title>
+  <meta name="description" content="Documentação de leitura do StoreGram: o que cada arquivo, função e fluxo faz." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@420;500;600;700&family=JetBrains+Mono:wght@420;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23155eef'/%3E%3Cpath d='M8 10h16M8 16h16M8 22h10' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menu-btn" type="button" aria-label="Abrir navegação">
+        <span></span><span></span><span></span>
+      </button>
+      <a class="brand" href="#visao">
+        <span class="mark" aria-hidden="true">SG</span>
+        <span class="brand-text">
+          <strong>StoreGram</strong>
+          <em>leitura da codebase</em>
+        </span>
+      </a>
+      <div class="search-wrap">
+        <label class="search">
+          <span class="sr">Buscar</span>
+          <input id="search" type="search" placeholder="Buscar função, arquivo ou fluxo" autocomplete="off" />
+          <kbd>/</kbd>
+        </label>
+        <div class="search-pop" id="search-pop" hidden></div>
+      </div>
+      <span class="version">Rust · 0.1.0</span>
+    </header>
+
+    <aside class="sidebar" id="sidebar">
+      <nav id="nav" aria-label="Seções"></nav>
+    </aside>
+
+    <main class="content" id="content" tabindex="-1"></main>
+
+    <aside class="toc" id="toc" aria-label="Nesta página"></aside>
+  </div>
+  <div class="backdrop" id="backdrop" hidden></div>
+  <script src="content.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
