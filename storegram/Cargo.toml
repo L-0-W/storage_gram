@@ -1,5 +1,5 @@
 [package]
-name = "StoreGram"
+name = "storegram"
 version = "0.1.0"
 edition = "2024"
 
@@ -12,4 +12,3 @@ grammers-tl-types = "0.9.0"
 rand = "0.10.0"
 tokio = { version = "1.50.0", features = ["rt-multi-thread"] }
 store_macros = { path = "../macros" }
-
