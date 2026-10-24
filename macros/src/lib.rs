@@ -4,7 +4,6 @@ use syn::{Data, DeriveInput, parse_macro_input};
 
 #[proc_macro_derive(StoreTable)]
 pub fn derive_store_table(input: TokenStream) -> TokenStream {
-
     let input = parse_macro_input!(input as DeriveInput);
     let nome = &input.ident;
 
@@ -19,14 +18,14 @@ pub fn derive_store_table(input: TokenStream) -> TokenStream {
 
                     quote! { (Arc::from(stringify!(#nome)), Arc::from(stringify!(#tipo))) }
                 });
-                
+
                 quote! {
                     vec![#(#nomes_campos), *]
                 }
             }
-            _ => quote! { vec![] }
-        }
-        _ => panic!("apenas funciona em structs")
+            _ => quote! { vec![] },
+        },
+        _ => panic!("apenas funciona em structs"),
     };
 
     let display_fields = match &input.data {
@@ -34,9 +33,9 @@ pub fn derive_store_table(input: TokenStream) -> TokenStream {
             syn::Fields::Named(campos) => {
                 let nomes_campos = campos.named.iter().map(|fi| {
                     let field_nome = &fi.ident;
-                    
-                    quote! { 
-                        write!(f, "{}: {}\n", stringify!(#field_nome), self.#field_nome)? 
+
+                    quote! {
+                        write!(f, "{}: {}\n", stringify!(#field_nome), self.#field_nome)?
                     }
                 });
 
@@ -44,10 +43,10 @@ pub fn derive_store_table(input: TokenStream) -> TokenStream {
                     #(#nomes_campos;)*
                     Ok(())
                 }
-            },
-            _ => quote! {}
-        }  
-        _ => panic!("Não e uma estrutura")
+            }
+            _ => quote! {},
+        },
+        _ => panic!("Não e uma estrutura"),
     };
 
     let expanded = quote! {
@@ -70,4 +69,3 @@ pub fn derive_store_table(input: TokenStream) -> TokenStream {
 
     TokenStream::from(expanded)
 }
-

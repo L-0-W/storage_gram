@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::{fmt, io, time::Duration};
+use std::{fmt, io};
 use storegram::types::Login::{Connect, Verification};
 use storegram::{
     store_gram::{
@@ -56,35 +56,22 @@ async fn main() {
 
     {
         let mut lock_store = store.lock().await;
-        lock_store.create_db("UserDB").await.unwrap();
+        let db_creation_result = lock_store.create_db("UserDB").await;
+
+        if db_creation_result.is_err() {
+            println!("ERRO AO CRIAR 'UserDB'");
+            return;
+        }
     }
 
-    Store::create_table::<User>(Arc::clone(&store))
+    Store::create_table::<User>(Arc::clone(&store), String::from("UserDB"))
         .await
-        .expect("erro ao criar table user");
-    Store::create_table::<Images>(Arc::clone(&store))
-        .await
-        .expect("erro ao criar table images");
-    Store::create_table::<Games>(Arc::clone(&store))
-        .await
-        .expect("erro ao criar table games");
+        .unwrap();
 
-    for table in store.lock().await.show_db_tables() {
-        println!("{:?}", table)
-    }
+    store.lock().await.get(String::from("UserDB")).await;
 
-    let value = User {
-        nome: "Luiz".to_string(),
-        idade: 10,
-    };
-
-    // {
-    //     let mut lock_store = store.lock().await;
-    //     lock_store.insert::<User>(value).await;
-    // }
-
-    {
-        let lock_store = store.lock().await;
-        lock_store.get().await
-    }
+    Store::from_::<User>()
+        .select(["Nome", "Idade"])
+        .where_(|user| user.idade > 25)
+        .run();
 }

@@ -10,7 +10,7 @@ use grammers_tl_types::types::{InputChannel, InputPeerChannel};
 
 use crate::manager::{File, SearchResult};
 use crate::types::{
-    Channel, Database, Login, ResultErrs, SelectFilters, StoreTableTrait, TelegramAPP,
+    Channel, Database, Login, Result, ResultErrs, SelectFilters, StoreTableTrait, TelegramAPP,
 };
 
 use grammers_tl_types::{self as tl, enums::Updates};
@@ -21,10 +21,8 @@ pub struct Store {
     #[allow(unused)]
     user: User,
     client: Client,
-    database: Database,
+    databases: Vec<Database>,
 }
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 impl Store {
     pub async fn verify_code(
@@ -40,7 +38,7 @@ impl Store {
             session_path: String::from("./session.gram"),
             user: user,
             client,
-            database: Database::default(),
+            databases: Vec::new(),
         };
 
         let return_obj = Arc::new(tokio::sync::Mutex::new(store_obj));
@@ -77,7 +75,7 @@ impl Store {
             session_path: String::from("./session.gram"),
             user: user,
             client,
-            database: Database::default(),
+            databases: Vec::new(),
         };
         let return_obj = Arc::new(tokio::sync::Mutex::new(store_obj));
 
@@ -118,7 +116,7 @@ impl Store {
                 session_path: String::from("./session.gram"),
                 user: user,
                 client,
-                database: Database::default(),
+                databases: Vec::new(),
             });
         }
 
@@ -128,41 +126,48 @@ impl Store {
             session_path: String::from(sesion_path),
             user: user,
             client,
-            database: Database::default(),
+            databases: Vec::new(),
         })
     }
 
     pub async fn create_db(&mut self, name: &str) -> std::result::Result<(), InvocationError> {
-        match File::search_base(name.to_string()) {
-            SearchResult::Ok(value) => {
-                let (peer, access_hash) = value;
+        // match File::search_base(name.to_string()) {
+        //     SearchResult::Ok(value) => {
+        //         let (peer, access_hash) = value;
 
-                let input = InputChannel {
-                    channel_id: peer,
-                    access_hash,
-                };
+        //         let input = InputChannel {
+        //             channel_id: peer,
+        //             access_hash,
+        //         };
 
-                let get = tl::functions::channels::GetChannels {
-                    id: vec![input.into()], // Into<enums::InputChannel>
-                };
+        //         let get = tl::functions::channels::GetChannels {
+        //             id: vec![input.into()], // Into<enums::InputChannel>
+        //         };
 
-                let chats = self.client.invoke(&get).await.unwrap();
+        //         let chats = self.client.invoke(&get).await.unwrap();
 
-                for chat in chats.chats() {
-                    match chat {
-                        tl::enums::Chat::Channel(c) => {
-                            if c.id == peer {
-                                self.database.channel = Channel::Channel(c);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
+        //         for chat in chats.chats() {
+        //             match chat {
+        //                 tl::enums::Chat::Channel(c) => {
+        //                     if c.id == peer {
+        //                         let mut database = Database::default();
 
-                return Ok(());
-            }
-            _ => {}
-        };
+        //                         database.set_channel(c);
+        //                         self.databases.push(database);
+        //                     }
+        //                 }
+        //                 _ => {}
+        //             }
+        //         }
+
+        //         return Ok(());
+        //     }
+        //     _ => {}
+        // };
+
+        if Database::exist(name.to_string(), &self.client).await {
+            return Ok(());
+        }
 
         if self.client.is_authorized().await? {
             let request = tl::functions::channels::CreateChannel {
@@ -192,7 +197,10 @@ impl Store {
                     for chat in &u.chats {
                         match chat {
                             tl::enums::Chat::Channel(c) => {
-                                let _ = &self.database.set_channel(c.clone());
+                                let mut database = Database::default();
+
+                                database.set_channel(c.clone());
+                                let _ = &self.databases.push(database);
 
                                 File::insert_base(
                                     name.to_string(),
@@ -213,48 +221,33 @@ impl Store {
         Ok(())
     }
 
-    fn table_exist<T: StoreTableTrait>(&mut self) -> bool {
-        let table_to_insert = T::get_struct();
+    pub async fn get(&self, from_base: String) {
+        let mut current_database_index: usize = 0;
+        //let mut db_exist: bool = false;
 
-        let table_exist = &self.database.tables_fields.contains_key(table_to_insert);
-
-        if *table_exist {
-            return true;
-        }
-
-        match File::search_table(table_to_insert.to_string()) {
-            SearchResult::Ok(e) => {
-                let (schema, peer) = e;
-
-                let schema: std::str::Split<'_, &str> = schema.trim().split(",");
-
-                let mut vec_items: Vec<(Arc<str>, Arc<str>)> = Vec::new();
-
-                for item in schema {
-                    let (name, ttype) = item.split_once(":").unwrap();
-                    vec_items.push((Arc::from(name), Arc::from(ttype)));
-                }
-
-                self.database
-                    .tables_fields
-                    .insert(Arc::from(table_to_insert), vec_items);
-                self.database
-                    .tables_peer
-                    .insert(Arc::from(table_to_insert), peer.parse::<i32>().unwrap());
-                return true;
+        for (idx, database) in self.databases.iter().enumerate() {
+            if database
+                .get_database_name()
+                .unwrap_or_default()
+                .contains(&from_base)
+            {
+                current_database_index = idx;
+                //db_exist = true;
+                break;
             }
-            _ => return false,
         }
-    }
 
-    pub async fn get(&self) {
-        let (channel_id, acess_has) = match &self.database.channel {
+        let (channel_id, acess_has) = match &self.databases[current_database_index].channel {
             Channel::Channel(c) => (Some(c.id), c.access_hash),
             _ => (None, None),
         };
 
-        let topics = self
-            .database
+        if channel_id.is_none() {
+            println!("Channel Id não existe");
+            return;
+        }
+
+        let topics = self.databases[current_database_index]
             .tables_peer
             .values()
             .map(|item| *item)
@@ -270,9 +263,12 @@ impl Store {
             topics: topics,
         };
 
-        let abc = self.client.invoke(&request).await.unwrap();
+        let Ok(forum_topic) = self.client.invoke(&request).await else {
+            println!("NEMHUM FORUM ENCONTRADO");
+            return;
+        };
 
-        match abc {
+        match forum_topic {
             ForumTopics::Topics(c) => {
                 for idx in 0..c.messages.len() {
                     let msg = match &c.messages[idx] {
@@ -295,33 +291,59 @@ impl Store {
         }
     }
 
-    pub async fn select_table<T: StoreTableTrait>(store: &Store) -> SelectFilters {
-        let filter = SelectFilters::<T> {table: T::get_filds()}
+    pub fn from_<T>() -> SelectFilters<T> {
+        SelectFilters::<T>::new()
     }
 
     pub async fn create_table<G: StoreTableTrait>(
         this: Arc<tokio::sync::Mutex<Self>>,
+        create_on_base: String,
     ) -> Option<ResultErrs> {
         let handler = tokio::task::spawn(async move {
             let mut guard = this.lock().await;
-            let result = guard.telegram_create_table::<G>().await;
+            let result = guard.telegram_create_table::<G>(create_on_base).await;
             return result;
         });
 
         handler.await.ok()?
     }
 
-    async fn telegram_create_table<F: StoreTableTrait>(&mut self) -> Option<ResultErrs> {
-        if self.table_exist::<F>() {
+    async fn telegram_create_table<F: StoreTableTrait>(
+        &mut self,
+        base: String,
+    ) -> Option<ResultErrs> {
+        let mut current_database_index: usize = 0;
+        let mut db_exist: bool = false;
+
+        for (idx, database) in self.databases.iter().enumerate() {
+            if database
+                .get_database_name()
+                .unwrap_or_default()
+                .contains(&base)
+            {
+                current_database_index = idx;
+                db_exist = true;
+                break;
+            }
+        }
+
+        if !db_exist {
+            println!("Database do not exist");
+            return Some(ResultErrs::DatabaseDoNotExist);
+        }
+
+        if self.databases[current_database_index]
+            .table_exist::<F>(&self.client)
+            .await
+        {
             eprintln!("TABLE JA EXISTE");
             return Some(ResultErrs::TableAlreadyExist);
-        }
+        };
 
         let fields: Vec<(Arc<str>, Arc<str>)> = F::get_filds();
         let struct_name: &str = F::get_struct();
 
-        let _ = &self
-            .database
+        self.databases[current_database_index]
             .set_table_fields((Arc::from(struct_name), fields.clone()));
 
         if let Ok(logged) = self.client.is_authorized().await
@@ -331,7 +353,7 @@ impl Store {
             return Some(ResultErrs::ClientNotLogged);
         }
 
-        match &self.database.channel {
+        match &self.databases[current_database_index].channel {
             Channel::IsNotSet => {
                 eprintln!("ERRO, DATABASE NÂO CRIADA!");
                 return Some(ResultErrs::ErrInicializeDataBase);
@@ -372,10 +394,13 @@ impl Store {
                                             match service.action {
                                                 tl::enums::MessageAction::TopicCreate(_) => {
                                                     if service.from_id.is_some() {
-                                                        let _ = &self.database.tables_peer.insert(
-                                                            Arc::from(struct_name),
-                                                            service.id,
-                                                        );
+                                                        let _ = &self.databases
+                                                            [current_database_index]
+                                                            .tables_peer
+                                                            .insert(
+                                                                Arc::from(struct_name),
+                                                                service.id,
+                                                            );
 
                                                         let fields_str = fields
                                                             .iter()
@@ -415,18 +440,64 @@ impl Store {
         return Some(ResultErrs::Ok);
     }
 
-    pub fn show_db_tables(&self) -> Values<'_, Arc<str>, Vec<(Arc<str>, Arc<str>)>> {
-        let table_names = self.database.tables_fields.values();
-        table_names
+    pub fn show_db_tables(
+        &self,
+        base: String,
+    ) -> std::result::Result<Values<'_, Arc<str>, Vec<(Arc<str>, Arc<str>)>>, ResultErrs> {
+        for database in &self.databases {
+            if database
+                .get_database_name()
+                .unwrap_or_default()
+                .contains(&base)
+            {
+                let table_names = database.tables_fields.values();
+                return Ok(table_names);
+            }
+        }
+
+        Err(ResultErrs::DatabaseDoNotExist)
     }
 
-    pub async fn insert<T: StoreTableTrait + std::fmt::Display>(&mut self, value_to_insert: T) {
-        if self.table_exist::<T>() {
+    pub async fn insert<T: StoreTableTrait + std::fmt::Display>(
+        &mut self,
+        value_to_insert: T,
+        base_to_insert: String,
+    ) -> std::result::Result<(), ResultErrs> {
+        let mut current_database_index: usize = 0;
+        let mut db_exist: bool = false;
+
+        //TODO - Essas funções deveriam naa verdade, chamar Database::exist, caso não existesse em nada, ok, poderia retornar erro.
+        // mas caso existesse em algum local, cloud/local ou memoria, certifica-se de criar nas outras plataformas.
+
+        for (idx, database) in self.databases.iter().enumerate() {
+            if database
+                .get_database_name()
+                .unwrap_or_default()
+                .contains(&base_to_insert)
+            {
+                current_database_index = idx;
+                db_exist = true;
+                break;
+            }
+        }
+
+        if !db_exist {
+            eprintln!("DATABASE NÂO EXISTE");
+            return Err(ResultErrs::DatabaseDoNotExist);
+        }
+
+        if self.databases[current_database_index]
+            .table_exist::<T>(&self.client)
+            .await
+        {
             let table_name = T::get_struct();
 
-            match &self.database.channel {
+            match &self.databases[current_database_index].channel {
                 Channel::Channel(_) => {
-                    let topic_peer = self.database.tables_peer.get(table_name).unwrap();
+                    let topic_peer = self.databases[current_database_index]
+                        .tables_peer
+                        .get(table_name)
+                        .unwrap();
 
                     println!("{}", T::get_filds()[0].0);
                     let message = InputMessage::new()
@@ -435,16 +506,24 @@ impl Store {
 
                     println!("{}", value_to_insert);
 
-                    match &self.database.channel {
+                    match &self.databases[current_database_index].channel {
                         Channel::Channel(channel) => {
                             self.client.send_message(channel, message).await.unwrap();
                         }
-                        _ => {}
+                        _ => {
+                            eprintln!("ERRO, CHANNEL NOT SET");
+                            return Err(ResultErrs::TableDoNotExist);
+                        }
                     }
                 }
-                _ => eprintln!("ERRO, CHANNEL NOT SET"),
+                _ => {
+                    eprintln!("ERRO, CHANNEL NOT SET");
+                    return Err(ResultErrs::TableDoNotExist);
+                }
             }
         }
+
+        Ok(())
     }
     // pub async fn send_file();
     // pub asynnc get_file()
