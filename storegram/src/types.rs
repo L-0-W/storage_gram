@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::{
     manager::{File, SearchResult},
-    store_gram::{self, Store},
+    store_gram::{self},
 };
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -35,7 +35,7 @@ type TablePeer = std::collections::HashMap<Arc<str>, i32>;
 
 pub enum Login {
     Verification((LoginToken, Client)),
-    Connect(Arc<tokio::sync::Mutex<store_gram::Store>>),
+    Connected(Arc<tokio::sync::Mutex<store_gram::Store>>),
 }
 
 pub struct SelectFilters<T> {

@@ -6,9 +6,9 @@ use grammers_client::{Client, InvocationError, SenderPool, message::InputMessage
 use grammers_session::storages::SqliteSession;
 use grammers_tl_types::enums::messages::ForumTopics;
 use grammers_tl_types::enums::{ForumTopic, InputPeer, Message};
-use grammers_tl_types::types::{InputChannel, InputPeerChannel};
+use grammers_tl_types::types::{InputPeerChannel};
 
-use crate::manager::{File, SearchResult};
+use crate::manager::{File};
 use crate::types::{
     Channel, Database, Login, Result, ResultErrs, SelectFilters, StoreTableTrait, TelegramAPP,
 };
@@ -79,7 +79,7 @@ impl Store {
         };
         let return_obj = Arc::new(tokio::sync::Mutex::new(store_obj));
 
-        return Ok(Login::Connect(return_obj));
+        return Ok(Login::Connected(return_obj));
     }
 
     #[allow(unused)]

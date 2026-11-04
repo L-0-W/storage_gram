@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::{fmt, io};
-use storegram::types::Login::{Connect, Verification};
+use storegram::types::Login::{Connected, Verification};
 use storegram::{
     store_gram::{
         Store,
@@ -51,7 +51,7 @@ async fn main() {
             Store::verify_code(client, token, code).await.unwrap()
         }
 
-        Connect(stt) => stt,
+        Connected(stt) => stt,
     };
 
     {
@@ -68,10 +68,26 @@ async fn main() {
         .await
         .unwrap();
 
+    {
+        let mut locked_store = store.lock().await;
+
+        let user = User{ nome: String::from("Luiz"), idade: 24};
+        let result = locked_store.insert(user, String::from("UserDB")).await;
+        
+        if result.is_err() 
+        {
+            println!("ERRO AO TENTAR INSERIR VALOR");
+            return
+        }
+
+    }
+
     store.lock().await.get(String::from("UserDB")).await;
 
     Store::from_::<User>()
         .select(["Nome", "Idade"])
         .where_(|user| user.idade > 25)
         .run();
+
+
 }
