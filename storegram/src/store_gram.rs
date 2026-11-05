@@ -10,7 +10,7 @@ use grammers_tl_types::types::{InputPeerChannel};
 
 use crate::manager::{File};
 use crate::types::{
-    Channel, Database, Login, Result, ResultErrs, SelectFilters, StoreTableTrait, TelegramAPP,
+    Channel, Database, DatabaseExistResult, Login, Result, ResultErrs, SelectFilters, StoreTableTrait, TelegramAPP,
 };
 
 use grammers_tl_types::{self as tl, enums::Updates};
@@ -165,8 +165,9 @@ impl Store {
         //     _ => {}
         // };
 
-        if Database::exist(name.to_string(), &self.client).await {
-            return Ok(());
+        match Database::exist(&name.to_string(), &self.client).await {
+            DatabaseExistResult::True => {}
+            _ => return Ok(())
         }
 
         if self.client.is_authorized().await? {
@@ -312,9 +313,28 @@ impl Store {
         &mut self,
         base: String,
     ) -> Option<ResultErrs> {
-        let mut current_database_index: usize = 0;
-        let mut db_exist: bool = false;
 
+        let result = Database::exist(&base, &self.client).await;
+
+        match result {
+            DatabaseExistResult::False => {
+                println!("ERRO, NÂO EXISTE");
+                return Some(ResultErrs::DatabaseDoNotExist);
+            }
+            DatabaseExistResult::OnlyInCloud => {
+                println!("ERRO, EXISTE APENAS EM CLOUD");
+                return Some(ResultErrs::DatabaseDoNotExist);
+            }
+            DatabaseExistResult::OnlyInLocal => {
+                println!("ERRO, EXISTE APENAS EM LOCAL");
+                return Some(ResultErrs::DatabaseDoNotExist);
+            }
+            _ => {}
+        }
+
+        let mut current_database_index: usize = 0;
+
+        
         for (idx, database) in self.databases.iter().enumerate() {
             if database
                 .get_database_name()
@@ -322,14 +342,8 @@ impl Store {
                 .contains(&base)
             {
                 current_database_index = idx;
-                db_exist = true;
                 break;
             }
-        }
-
-        if !db_exist {
-            println!("Database do not exist");
-            return Some(ResultErrs::DatabaseDoNotExist);
         }
 
         if self.databases[current_database_index]
@@ -463,12 +477,30 @@ impl Store {
         value_to_insert: T,
         base_to_insert: String,
     ) -> std::result::Result<(), ResultErrs> {
-        let mut current_database_index: usize = 0;
-        let mut db_exist: bool = false;
-
         //TODO - Essas funções deveriam naa verdade, chamar Database::exist, caso não existesse em nada, ok, poderia retornar erro.
         // mas caso existesse em algum local, cloud/local ou memoria, certifica-se de criar nas outras plataformas.
 
+        let result = Database::exist(&base_to_insert, &self.client).await;
+
+        match result {
+            DatabaseExistResult::False => {
+                println!("ERRO, NÂO EXISTE");
+                return Err(ResultErrs::DatabaseDoNotExist);
+            }
+            DatabaseExistResult::OnlyInCloud => {
+                println!("ERRO, EXISTE APENAS EM CLOUD");
+                return Err(ResultErrs::DatabaseDoNotExist);
+            }
+            DatabaseExistResult::OnlyInLocal => {
+                println!("ERRO, EXISTE APENAS EM LOCAL");
+                return Err(ResultErrs::DatabaseDoNotExist);
+            }
+            _ => {}
+        }
+
+        let mut current_database_index: usize = 0;
+
+        
         for (idx, database) in self.databases.iter().enumerate() {
             if database
                 .get_database_name()
@@ -476,15 +508,10 @@ impl Store {
                 .contains(&base_to_insert)
             {
                 current_database_index = idx;
-                db_exist = true;
                 break;
             }
         }
 
-        if !db_exist {
-            eprintln!("DATABASE NÂO EXISTE");
-            return Err(ResultErrs::DatabaseDoNotExist);
-        }
 
         if self.databases[current_database_index]
             .table_exist::<T>(&self.client)

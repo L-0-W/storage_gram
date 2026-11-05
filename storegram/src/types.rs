@@ -79,11 +79,19 @@ pub enum Channel {
     IsNotSet,
 }
 
+pub enum DatabaseExistResult {
+    False,
+    True,
+    OnlyInCloud,
+    OnlyInLocal
+}
+
 pub struct Database {
     pub channel: Channel,
     pub tables_fields: TableFields,
     pub tables_peer: TablePeer,
 }
+
 
 impl Database {
     #[allow(unused)]
@@ -173,7 +181,7 @@ impl Database {
         }
     }
 
-    async fn exist_cloud(database_name: String, client: &Client) -> Result<bool> {
+    async fn exist_cloud(database_name: &String, client: &Client) -> Result<bool> {
         let mut dialogs = client.iter_dialogs();
 
         while let Some(dialog) = dialogs.next().await? {
@@ -187,21 +195,29 @@ impl Database {
         Ok(false)
     }
 
-    pub async fn exist(database_name: String, client: &Client) -> bool {
+    pub async fn exist(database_name: &String, client: &Client) -> DatabaseExistResult {
         let result_in_local_file = match File::search_base(database_name.to_string()) {
             SearchResult::Ok(_) => true,
             _ => false,
         };
 
-        let result_in_cloud = Database::exist_cloud(database_name, client)
+        let result_in_cloud = Database::exist_cloud(&database_name, client)
             .await
             .unwrap_or(false);
 
-        if result_in_cloud || result_in_local_file {
-            true
-        } else {
-            false
+        if !result_in_cloud && !result_in_local_file {
+            return DatabaseExistResult::False;
         }
+
+        if !result_in_cloud && result_in_local_file {
+            return DatabaseExistResult::OnlyInLocal;
+        }
+ 
+        if result_in_cloud && !result_in_local_file {
+            return DatabaseExistResult::OnlyInCloud;
+        }
+
+        return DatabaseExistResult::True;
     }
 }
 
