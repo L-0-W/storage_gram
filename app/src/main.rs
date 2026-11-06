@@ -59,11 +59,12 @@ async fn main() {
         let db_creation_result = lock_store.create_db("UserDB").await;
 
         if db_creation_result.is_err() {
-            println!("ERRO AO CRIAR 'UserDB'");
+            println!("ERRO AO CRIAR 'UserDB' {:?}", db_creation_result.err());
             return;
         }
     }
 
+    // TODO - Caso banco de dados ja esteja criado local ou cloud, verificar se table ja não existe
     Store::create_table::<User>(Arc::clone(&store), String::from("UserDB"))
         .await
         .unwrap();

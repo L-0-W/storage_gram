@@ -64,6 +64,69 @@ impl File {
         return true;
     }
 
+    fn database_name_exist(base_name: &String, file: &fs::File) -> Result<i32, ()> {
+        let reader = BufReader::new(file);
+        let mut line_number = 0;
+
+        for line_result in reader.lines() {
+            let Ok(line) = line_result else { return Err(()) };
+
+            if line.contains(base_name) {
+                return Ok(line_number)
+            }
+
+            line_number+=1;
+        }
+
+        return Err(());
+    }
+
+fn write_in_line(line: i32, file: &fs::File, base_name: &String, peer: &String, acess_hash: &String) -> bool {
+	let mut writer = BufWriter::new(file);
+	let reader = BufReader::new(file);
+	
+	for (line_idx, _) in reader.lines().enumerate()  {
+		if line_idx == line as usize {
+			let write_result = writeln!(writer, "{}|{}|{}", base_name, peer, acess_hash);
+			
+			if write_result.is_err() {
+				eprintln!("NÂO FOI POSSIVEL ESCREVER EM ARQUIVO");
+				return false;
+			}
+			
+			break;
+		}
+	}
+	
+	let flush_res = writer.flush();
+	
+	if flush_res.is_err() {
+		eprintln!("ERRO AO DAR FLUSH: {}", flush_res.err().unwrap());
+		return false;
+	}
+	
+	return true;
+}
+    
+    fn write(file: &fs::File, base_name: &String, peer: &String, acess_hash: &String) -> bool {
+        let mut writer = BufWriter::new(file);
+        let write_result = writeln!(writer, "{}|{}|{}", base_name, peer, acess_hash);
+        
+        if write_result.is_err() {
+            eprintln!("NÂO FOI POSSIVEL ESCREVER EM ARQUIVO");
+            return false;
+        }
+        
+        let flush_res = writer.flush();
+        
+        if flush_res.is_err() {
+            eprintln!("ERRO AO DAR FLUSH: {}", flush_res.err().unwrap());
+            return false;
+        }
+
+        return true
+    }
+    
     pub fn insert_base(base_name: String,  peer: String, acess_hash: String) -> bool {
         let res = fs::exists("./schema.base");
 
@@ -79,33 +142,22 @@ impl File {
             File::create("schema.base");
         };
 
-        let file = OpenOptions::new()
+        let Ok(file) = OpenOptions::new()
             .write(true)
             .append(true)
-            .open("./schema.base");
+            .open("./schema.base") else {
+                eprintln!("ERRO AO ABRIR ARQUIVO");
+                return false;
+            };
 
-        if file.is_err() {
-            eprintln!("ERRO AO ABRIR ARQUIVO");
-            return false;
+
+        if let Ok(line_result) =  File::database_name_exist(&base_name, &file) {
+            return File::write_in_line(line_result, &file, &base_name, &peer, &acess_hash);
+        } 
+        else {
+            return File::write(&file, &base_name, &peer, &acess_hash);    
         }
-
-        let mut writer = BufWriter::new(file.unwrap());
-        let write_result = writeln!(writer, "{}|{}|{}", base_name, peer, acess_hash);
-
-        if write_result.is_err() {
-            eprintln!("NÂO FOI POSSIVEL ESCREVER EM ARQUIVO");
-            return false;
-        }
-        
-        let flush_res = writer.flush();
-
-        if flush_res.is_err() {
-            eprintln!("ERRO AO DAR FLUSH: {}", flush_res.err().unwrap());
-            return false;
-        }
-
-
-        return true;
+    
     }
 
     pub fn search_base(base_name: String) -> SearchResult<(i64, i64)> {

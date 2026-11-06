@@ -130,46 +130,7 @@ impl Store {
         })
     }
 
-    pub async fn create_db(&mut self, name: &str) -> std::result::Result<(), InvocationError> {
-        // match File::search_base(name.to_string()) {
-        //     SearchResult::Ok(value) => {
-        //         let (peer, access_hash) = value;
-
-        //         let input = InputChannel {
-        //             channel_id: peer,
-        //             access_hash,
-        //         };
-
-        //         let get = tl::functions::channels::GetChannels {
-        //             id: vec![input.into()], // Into<enums::InputChannel>
-        //         };
-
-        //         let chats = self.client.invoke(&get).await.unwrap();
-
-        //         for chat in chats.chats() {
-        //             match chat {
-        //                 tl::enums::Chat::Channel(c) => {
-        //                     if c.id == peer {
-        //                         let mut database = Database::default();
-
-        //                         database.set_channel(c);
-        //                         self.databases.push(database);
-        //                     }
-        //                 }
-        //                 _ => {}
-        //             }
-        //         }
-
-        //         return Ok(());
-        //     }
-        //     _ => {}
-        // };
-
-        match Database::exist(&name.to_string(), &self.client).await {
-            DatabaseExistResult::True => {}
-            _ => return Ok(())
-        }
-
+    async fn create_db_cloud(&mut self, name: &str) -> std::result::Result<(), InvocationError> {
         if self.client.is_authorized().await? {
             let request = tl::functions::channels::CreateChannel {
                 broadcast: false,
@@ -182,32 +143,32 @@ impl Store {
                 address: None,
                 ttl_period: None,
             };
-
+            
             let result = self.client.invoke(&request).await;
-
+            
             if result.is_err() {
                 let err = result.err().unwrap();
                 eprintln!("{}", err);
                 return Err(err);
             }
-
+            
             let updates = result.unwrap();
-
+            
             match updates {
                 tl::enums::Updates::Updates(u) => {
                     for chat in &u.chats {
                         match chat {
                             tl::enums::Chat::Channel(c) => {
                                 let mut database = Database::default();
-
+                                
                                 database.set_channel(c.clone());
                                 let _ = &self.databases.push(database);
 
-                                File::insert_base(
-                                    name.to_string(),
-                                    c.id.to_string(),
-                                    c.access_hash.unwrap().to_string(),
-                                );
+                               File::insert_base(
+    name.to_string(),
+    c.id.to_string(),
+    c.access_hash.unwrap_or_default().to_string(),
+);
                             }
                             _ => eprintln!("ERRO AO MATCH u.chats"),
                         }
@@ -215,9 +176,56 @@ impl Store {
                 }
                 _ => print!("ERRO AO MATCH updates"),
             }
-
+            
             return Ok(());
-        };
+        }
+
+        Ok(())
+    }
+    async fn create_db_local(&mut self, target_name: &str) -> std::result::Result<(), InvocationError> {
+        
+        let result = self.client.invoke(&tl::functions::contacts::Search {
+            q: target_name.to_string(),
+            limit: 100,
+        }).await?;
+        
+        let tl::enums::contacts::Found::Found(found) = result;
+        
+        for chat in found.chats {
+            if let tl::enums::Chat::Channel(c) = chat {
+                
+                let titulo_bate = c.title.eq_ignore_ascii_case(target_name);
+                
+                if titulo_bate {
+                    File::insert_base(
+                        target_name.to_string(),
+                        c.id.to_string(),
+                        c.access_hash.unwrap_or_default().to_string(),
+                    );
+                    
+                    let mut database = Database::default();
+                                
+                    database.set_channel(c.clone());
+                    let _ = &self.databases.push(database);
+                    
+                    return Ok(());
+                } 
+            }
+        }
+        
+        return Err(InvocationError::InvalidDc);
+    }
+    
+    //TODO - 'create_db_cloud' deveria apenas fazer a criação no cloud, sem chamar File::insert_db, isso deveira acontecer aqui em create_db
+    // para que faça sentindo, em ::False a chamada de 'create_db_cloud' e 'create_db_local'
+    pub async fn create_db(&mut self, name: &str) -> std::result::Result<(), InvocationError> {
+
+        match Database::exist(&name.to_string(), &self.client).await {
+            DatabaseExistResult::False => self.create_db_cloud(name).await?,
+            DatabaseExistResult::OnlyInLocal => self.create_db_cloud(name).await?,
+            DatabaseExistResult::OnlyInCloud => self.create_db_local(name).await?,
+            DatabaseExistResult::True => return Ok(())
+        }
 
         Ok(())
     }
@@ -549,12 +557,13 @@ impl Store {
                 }
             }
         }
-
+    
         Ok(())
     }
     // pub async fn send_file();
-    // pub asynnc get_file()
+                // pub asynnc get_file()
 }
+
 
 pub mod macros {
     pub use crate::types::StoreTableTrait;
