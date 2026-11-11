@@ -67,9 +67,10 @@ async fn main() {
     }
 
     // TODO - Caso banco de dados ja esteja criado local ou cloud, verificar se table ja não existe
-    Store::create_table::<User>(Arc::clone(&store), String::from("UserDB"))
-        .await
-        .unwrap();
+    // seguindo isso, melhor refatoração e 
+    // Store::create_table::<User>(Arc::clone(&store), String::from("UserDB"))
+    //     .await
+    //     .unwrap();
 
     {
         let mut locked_store = store.lock().await;

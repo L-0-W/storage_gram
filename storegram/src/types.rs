@@ -43,6 +43,7 @@ pub struct SelectFilters<T> {
     where_function: Option<fn(T) -> bool>,
 }
 
+
 impl<T> SelectFilters<T> {
     pub fn new() -> Self {
         Self {
@@ -74,16 +75,34 @@ impl<T> SelectFilters<T> {
     }
 }
 
+
 pub enum Channel {
     Channel(tl::types::Channel),
     IsNotSet,
 }
 
+pub trait DatabaseLocations {
+    fn is_true (&self)  -> bool;
+}
+
+pub struct Cloud(bool);
+impl DatabaseLocations for Cloud {
+    fn is_true (&self)  -> bool { self.0 }
+}
+
+pub struct Local(bool);
+impl DatabaseLocations for Local {
+    fn is_true (&self)  -> bool { self.0 }
+}
+
+pub struct Memory(bool);
+impl DatabaseLocations for Memory {
+    fn is_true (&self)  -> bool { self.0 }
+}
+
+
 pub enum DatabaseExistResult {
-    False,
-    True,
-    OnlyInCloud,
-    OnlyInLocal
+    OnlyIn((Cloud, Local, Memory)),
 }
 
 pub struct Database {
@@ -205,19 +224,7 @@ impl Database {
             .await
             .unwrap_or(false);
         
-        if !result_in_cloud && !result_in_local_file {
-            return DatabaseExistResult::False;
-        }
-
-        if !result_in_cloud && result_in_local_file {
-            return DatabaseExistResult::OnlyInLocal;
-        }
-
-        if result_in_cloud && !result_in_local_file {
-            return DatabaseExistResult::OnlyInCloud;
-        }
-
-        return DatabaseExistResult::True;
+        return DatabaseExistResult::OnlyIn((Cloud(result_in_cloud), Local(result_in_local_file), Memory(false)));
     }
 }
 

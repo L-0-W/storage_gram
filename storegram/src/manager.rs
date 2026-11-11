@@ -190,7 +190,39 @@ fn write_in_line(line: i32, file: &fs::File, base_name: &String, peer: &String, 
 
         return SearchResult::NoItemFound;
     }
+    
 
+    pub fn get_tables() -> SearchResult<(Vec<String>, Vec<String>)> {
+        let file = fs::File::open("schema.table");
+        let tables = vec![];
+
+        if file.is_err() {
+            eprintln!("ARQUIVO NÂO EXISTE");
+            return SearchResult::FileNotExist;
+        }
+
+        let buf_reader = BufReader::new(file.unwrap());
+
+        for lines_res in buf_reader.lines() {
+            if lines_res.is_err() {
+                eprintln!("ARQUIVO VAZIO");
+                return SearchResult::FileEmpty;
+            }
+            
+            let lines = lines_res.unwrap();
+            
+            let name = lines.split("|").collect::<Vec<&str>>()[0];
+            let schema = lines.split("|").collect::<Vec<&str>>()[1];
+            let peer = lines.split("|").collect::<Vec<&str>>()[2];
+
+            if name == table_name {
+                return SearchResult::Ok((schema.to_string(), peer.to_string()));
+            }
+        }
+
+        return SearchResult::NoItemFound;
+
+    }
     pub fn search_table(table_name: String) -> SearchResult<(String, String)> {
         let file = fs::File::open("schema.table");
     

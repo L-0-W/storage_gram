@@ -8,9 +8,9 @@ use grammers_tl_types::enums::messages::{Dialogs, ForumTopics};
 use grammers_tl_types::enums::{ForumTopic, InputPeer, Message};
 use grammers_tl_types::types::{InputPeerChannel};
 
-use crate::manager::{File};
+use crate::manager::{File, SearchResult};
 use crate::types::{
-    Channel, Database, DatabaseExistResult, Login, Result, ResultErrs, SelectFilters, StoreTableTrait, TelegramAPP,
+    Channel, Database, DatabaseExistResult, DatabaseLocations, Login, Result, ResultErrs, SelectFilters, StoreTableTrait, TelegramAPP,
 };
 
 use grammers_tl_types::{self as tl, enums::Updates};
@@ -33,44 +33,44 @@ impl Store {
         let Ok(user) = client.sign_in(&token, &code.trim()).await else {
             return Err("Codigo errado".into());
         };
-
+        
         let store_obj = Self {
             session_path: String::from("./session.gram"),
             user: user,
             client,
             databases: Vec::new(),
         };
-
+        
         let return_obj = Arc::new(tokio::sync::Mutex::new(store_obj));
-
+        
         return Ok(return_obj);
     }
     pub async fn try_connect(app: TelegramAPP) -> Result<Login> {
         let session = Arc::new(SqliteSession::open("./session.gram").await?);
-
+        
         let SenderPool {
             runner,
             handle,
             updates: _,
         } = SenderPool::new(Arc::clone(&session), app.api_id);
-
+        
         let client = Client::new(handle.clone());
-
+        
         tokio::task::spawn(async move {
             runner.run().await;
         });
-
+        
         if !client.is_authorized().await? {
             let token = match client.request_login_code(&app.phone, &app.api_hash).await {
                 Ok(token) => token,
                 _ => panic!("ERRO"),
             };
-
+            
             return Ok(Login::Verification((token, client)));
         }
-
+        
         let user = client.get_me().await.expect("não possivel pegar usuario");
-
+        
         let store_obj = Self {
             session_path: String::from("./session.gram"),
             user: user,
@@ -78,40 +78,40 @@ impl Store {
             databases: Vec::new(),
         };
         let return_obj = Arc::new(tokio::sync::Mutex::new(store_obj));
-
+        
         return Ok(Login::Connected(return_obj));
     }
-
+    
     #[allow(unused)]
     pub async fn connect_from_session(app: TelegramAPP, sesion_path: &str) -> Result<Self> {
         let session = Arc::new(SqliteSession::open(&sesion_path).await?);
-
+        
         let SenderPool {
             runner,
             handle,
             updates: _,
         } = SenderPool::new(Arc::clone(&session), app.api_id);
-
+        
         let client = Client::new(handle.clone());
-
+        
         tokio::task::spawn(async move {
             runner.run().await;
         });
-
+        
         if !client.is_authorized().await? {
             let token = match client.request_login_code(&app.phone, &app.api_hash).await {
                 Ok(token) => token,
                 _ => panic!("ERRO"),
             };
-
+            
             let mut code: String = String::new();
-
+            
             println!("Digite o codigo que chegou");
             io::stdin().read_line(&mut code).unwrap();
-
+            
             let user: grammers_client::peer::User =
-                client.sign_in(&token, &code.trim()).await.unwrap();
-
+            client.sign_in(&token, &code.trim()).await.unwrap();
+            
             return Ok(Self {
                 session_path: String::from("./session.gram"),
                 user: user,
@@ -119,9 +119,9 @@ impl Store {
                 databases: Vec::new(),
             });
         }
-
+        
         let user = client.get_me().await.expect("não possivel pegar usuario");
-
+        
         Ok(Self {
             session_path: String::from(sesion_path),
             user: user,
@@ -129,7 +129,7 @@ impl Store {
             databases: Vec::new(),
         })
     }
-
+    
     async fn create_db_cloud(&mut self, name: &str) -> std::result::Result<(), InvocationError> {
         if self.client.is_authorized().await? {
             let request = tl::functions::channels::CreateChannel {
@@ -163,8 +163,8 @@ impl Store {
                                 
                                 database.set_channel(c.clone());
                                 let _ = &self.databases.push(database);
-
-                               File::insert_base(
+                                
+                                File::insert_base(
                                     name.to_string(),
                                     c.id.to_string(),
                                     c.access_hash.unwrap_or_default().to_string(),
@@ -179,7 +179,7 @@ impl Store {
             
             return Ok(());
         }
-
+        
         Ok(())
     }
     async fn create_db_local(&mut self, target_name: &str) -> std::result::Result<(), InvocationError> {
@@ -193,14 +193,14 @@ impl Store {
             limit: 100,
             hash: 0,
         }).await?;        
-
-
+        
+        
         let (_, _, chats, _, _) = match res {
             Dialogs::Slice(d) => (d.dialogs, d.messages, d.chats, d.users, false),
             Dialogs::Dialogs(d) => (d.dialogs, d.messages, d.chats, d.users, true),
             Dialogs::NotModified(_) => unreachable!("")
         };
-
+        
         for c in &chats {
             match c {
                 tl::enums::Chat::Channel(c) => {
@@ -214,37 +214,37 @@ impl Store {
                         );
                         
                         let mut database = Database::default();
-                                    
+                        
                         database.set_channel(c.clone());
                         let _ = &self.databases.push(database);
                         
                         return Ok(());
                     } 
-
+                    
                 },
                 _ => {}
             }
         }
-
+        
         // for chat in found.chats {
         //     if let tl::enums::Chat::Channel(c) = chat {
-                
+        
         //         let titulo_bate = c.title.eq_ignore_ascii_case(target_name);
-
+        
         //         println!("{}", c.title);
-                
+        
         //         if titulo_bate {
         //             File::insert_base(
         //                 "UserDB".to_string(),
         //                 c.id.to_string(),
         //                 c.access_hash.unwrap_or_default().to_string(),
         //             );
-                    
+        
         //             let mut database = Database::default();
-                                
+        
         //             database.set_channel(c.clone());
         //             let _ = &self.databases.push(database);
-                    
+        
         //             return Ok(());
         //         } 
         //     }
@@ -252,68 +252,84 @@ impl Store {
         
         return Err(InvocationError::InvalidDc);
     }
-    
+    async fn create_db_memory(&mut self, target_name: &str) -> std::result::Result<(), InvocationError> {
+        
+        let res = File::search_base(target_name.to_string());
+        
+        match  res {
+            SearchResult::Ok(v) => {
+                println!("{} - {}", v.0, v.1);
+            }
+            _ => {}
+        }
+        return  Err(InvocationError::InvalidDc);
+    }
     //TODO - 'create_db_cloud' deveria apenas fazer a criação no cloud, sem chamar File::insert_db, isso deveira acontecer aqui em create_db
     // para que faça sentindo, em ::False a chamada de 'create_db_cloud' e 'create_db_local'
     pub async fn create_db(&mut self, name: &str) -> std::result::Result<(), InvocationError> {
-
+        
         match Database::exist(&name.to_string(), &self.client).await {
-            DatabaseExistResult::False => self.create_db_cloud(name).await?,
-            DatabaseExistResult::OnlyInLocal => self.create_db_cloud(name).await?,
-            DatabaseExistResult::OnlyInCloud => self.create_db_local(name).await?,
-            DatabaseExistResult::True => return Ok(())
+            DatabaseExistResult::OnlyIn((cloud, local, memory)) => {
+                if !cloud.is_true() && !local.is_true() && !memory.is_true() { self.create_db_cloud(name).await? }
+                
+                if !cloud.is_true() { self.create_db_cloud(name).await? }
+                if !local.is_true() { self.create_db_local(name).await? }
+                
+                if !memory.is_true() { self.create_db_memory(name).await? }
+                
+                return Ok(())
+            }
         }
-
-        Ok(())
+        
     }
-
+    
     pub async fn get(&self, from_base: String) {
         let mut current_database_index: usize = 0;
         //let mut db_exist: bool = false;
-
+        
         for (idx, database) in self.databases.iter().enumerate() {
             if database
-                .get_database_name()
-                .unwrap_or_default()
-                .contains(&from_base)
+            .get_database_name()
+            .unwrap_or_default()
+            .contains(&from_base)
             {
                 current_database_index = idx;
                 //db_exist = true;
                 break;
             }
         }
-
+        
         let (channel_id, acess_has) = match &self.databases[current_database_index].channel {
             Channel::Channel(c) => (Some(c.id), c.access_hash),
             _ => (None, None),
         };
-
+        
         if channel_id.is_none() {
             println!("Channel Id não existe");
             return;
         }
-
+        
         let topics = self.databases[current_database_index]
-            .tables_peer
-            .values()
-            .map(|item| *item)
-            .collect::<Vec<i32>>();
-
+        .tables_peer
+        .values()
+        .map(|item| *item)
+        .collect::<Vec<i32>>();
+        
         let myi = InputPeer::Channel(InputPeerChannel {
             channel_id: channel_id.unwrap(),
             access_hash: acess_has.unwrap(),
         });
-
+        
         let request = tl::functions::messages::GetForumTopicsById {
             peer: myi,
             topics: topics,
         };
-
+        
         let Ok(forum_topic) = self.client.invoke(&request).await else {
             println!("NEMHUM FORUM ENCONTRADO");
             return;
         };
-
+        
         match forum_topic {
             ForumTopics::Topics(c) => {
                 for idx in 0..c.messages.len() {
@@ -321,12 +337,12 @@ impl Store {
                         Message::Message(m) => Some(&m.message),
                         _ => Some(&"Não tem".to_string()),
                     };
-
+                    
                     let topic = match &c.topics[idx] {
                         ForumTopic::Topic(to) => Some(&to.title),
                         _ => None,
                     };
-
+                    
                     println!(
                         "TOPIC: {}\n ------- \n MESSAGE: {}",
                         topic.unwrap(),
@@ -336,11 +352,11 @@ impl Store {
             }
         }
     }
-
+    
     pub fn from_<T>() -> SelectFilters<T> {
         SelectFilters::<T>::new()
     }
-
+    
     pub async fn create_table<G: StoreTableTrait>(
         this: Arc<tokio::sync::Mutex<Self>>,
         create_on_base: String,
@@ -350,68 +366,72 @@ impl Store {
             let result = guard.telegram_create_table::<G>(create_on_base).await;
             return result;
         });
-
+        
         handler.await.ok()?
     }
-
+    
     async fn telegram_create_table<F: StoreTableTrait>(
         &mut self,
         base: String,
     ) -> Option<ResultErrs> {
-
+        
         let result = Database::exist(&base, &self.client).await;
-
+        
         match result {
-            DatabaseExistResult::False => {
-                println!("ERRO, NÂO EXISTE");
-                return Some(ResultErrs::DatabaseDoNotExist);
+            DatabaseExistResult::OnlyIn((cloud, local, memory)) => {
+                if !cloud.is_true() && !local.is_true() && !memory.is_true() { 
+                    println!("ERRO, DATABASE NÂO EXISTE");
+                    return Some(ResultErrs::DatabaseDoNotExist);
+                }
+                
+                if !cloud.is_true() {
+                    let _ = self.create_db_cloud(&base).await;
+                }
+                
+                if !local.is_true() {
+                    let _ = self.create_db_local(&base).await;
+                }
+                
+                if !memory.is_true() {}
             }
-            DatabaseExistResult::OnlyInCloud => {
-                println!("ERRO, EXISTE APENAS EM CLOUD");
-                return Some(ResultErrs::DatabaseDoNotExist);
-            }
-            DatabaseExistResult::OnlyInLocal => {
-                println!("ERRO, EXISTE APENAS EM LOCAL");
-                return Some(ResultErrs::DatabaseDoNotExist);
-            }
-            _ => {}
         }
-
+        
+        
         let mut current_database_index: usize = 0;
-
+        
         
         for (idx, database) in self.databases.iter().enumerate() {
             if database
-                .get_database_name()
-                .unwrap_or_default()
-                .contains(&base)
+            .get_database_name()
+            .unwrap_or_default()
+            .contains(&base)
             {
                 current_database_index = idx;
                 break;
             }
         }
-
+        
         if self.databases[current_database_index]
-            .table_exist::<F>(&self.client)
-            .await
+        .table_exist::<F>(&self.client)
+        .await
         {
             eprintln!("TABLE JA EXISTE");
             return Some(ResultErrs::TableAlreadyExist);
         };
-
+        
         let fields: Vec<(Arc<str>, Arc<str>)> = F::get_filds();
         let struct_name: &str = F::get_struct();
-
+        
         self.databases[current_database_index]
-            .set_table_fields((Arc::from(struct_name), fields.clone()));
-
+        .set_table_fields((Arc::from(struct_name), fields.clone()));
+        
         if let Ok(logged) = self.client.is_authorized().await
-            && !logged
+        && !logged
         {
             eprintln!("ERRO, CLIENTE NÂO LOGADO");
             return Some(ResultErrs::ClientNotLogged);
         }
-
+        
         match &self.databases[current_database_index].channel {
             Channel::IsNotSet => {
                 eprintln!("ERRO, DATABASE NÂO CRIADA!");
@@ -422,7 +442,7 @@ impl Store {
                     channel_id: channel.id,
                     access_hash: channel.access_hash.unwrap(),
                 };
-
+                
                 let create_topic = grammers_tl_types::functions::messages::CreateForumTopic {
                     title_missing: false,
                     title: struct_name.to_string(),
@@ -432,16 +452,16 @@ impl Store {
                     peer: forum_input.into(),
                     send_as: None,
                 };
-
+                
                 let result: std::result::Result<Updates, InvocationError> =
-                    self.client.invoke(&create_topic).await;
-
+                self.client.invoke(&create_topic).await;
+                
                 if result.is_err() {
                     let err = result.err().unwrap();
                     eprintln!("{}", err);
                     return Some(ResultErrs::ErrInvoke(err));
                 }
-
+                
                 let enums = result.unwrap();
                 match enums {
                     tl::enums::Updates::Updates(updates) => {
@@ -454,24 +474,24 @@ impl Store {
                                                 tl::enums::MessageAction::TopicCreate(_) => {
                                                     if service.from_id.is_some() {
                                                         let _ = &self.databases
-                                                            [current_database_index]
-                                                            .tables_peer
-                                                            .insert(
-                                                                Arc::from(struct_name),
-                                                                service.id,
-                                                            );
-
+                                                        [current_database_index]
+                                                        .tables_peer
+                                                        .insert(
+                                                            Arc::from(struct_name),
+                                                            service.id,
+                                                        );
+                                                        
                                                         let fields_str = fields
-                                                            .iter()
-                                                            .map(|item| {
-                                                                String::from(format!(
-                                                                    "{}: {}",
-                                                                    item.0, item.1
-                                                                ))
-                                                            })
-                                                            .collect::<Vec<_>>()
-                                                            .join(",");
-
+                                                        .iter()
+                                                        .map(|item| {
+                                                            String::from(format!(
+                                                                "{}: {}",
+                                                                item.0, item.1
+                                                            ))
+                                                        })
+                                                        .collect::<Vec<_>>()
+                                                        .join(",");
+                                                        
                                                         File::insert_table(
                                                             struct_name.to_string(),
                                                             fields_str,
@@ -495,89 +515,90 @@ impl Store {
                 }
             }
         }
-
+        
         return Some(ResultErrs::Ok);
     }
-
+    
     pub fn show_db_tables(
         &self,
         base: String,
     ) -> std::result::Result<Values<'_, Arc<str>, Vec<(Arc<str>, Arc<str>)>>, ResultErrs> {
         for database in &self.databases {
             if database
-                .get_database_name()
-                .unwrap_or_default()
-                .contains(&base)
+            .get_database_name()
+            .unwrap_or_default()
+            .contains(&base)
             {
                 let table_names = database.tables_fields.values();
                 return Ok(table_names);
             }
         }
-
+        
         Err(ResultErrs::DatabaseDoNotExist)
     }
-
+    
     pub async fn insert<T: StoreTableTrait + std::fmt::Display>(
         &mut self,
         value_to_insert: T,
         base_to_insert: String,
     ) -> std::result::Result<(), ResultErrs> {
-        //TODO - Essas funções deveriam naa verdade, chamar Database::exist, caso não existesse em nada, ok, poderia retornar erro.
-        // mas caso existesse em algum local, cloud/local ou memoria, certifica-se de criar nas outras plataformas.
-
+        
         let result = Database::exist(&base_to_insert, &self.client).await;
-
+        
         match result {
-            DatabaseExistResult::False => {
-                println!("ERRO, NÂO EXISTE");
-                return Err(ResultErrs::DatabaseDoNotExist);
+            DatabaseExistResult::OnlyIn((cloud, local, memory)) => {
+                if !cloud.is_true() && !local.is_true() && !memory.is_true() { 
+                    println!("ERRO, DATABASE NÂO EXISTE");
+                    return Err(ResultErrs::DatabaseDoNotExist);
+                }
+                
+                if !cloud.is_true() {
+                    let _ = self.create_db_cloud(&base_to_insert).await;
+                }
+                
+                if !local.is_true() {
+                    let _ = self.create_db_local(&base_to_insert).await;
+                }
+                
+                if !memory.is_true() {}
             }
-            DatabaseExistResult::OnlyInCloud => {
-                println!("ERRO, EXISTE APENAS EM CLOUD");
-                return Err(ResultErrs::DatabaseDoNotExist);
-            }
-            DatabaseExistResult::OnlyInLocal => {
-                println!("ERRO, EXISTE APENAS EM LOCAL");
-                return Err(ResultErrs::DatabaseDoNotExist);
-            }
-            _ => {}
         }
-
+        
         let mut current_database_index: usize = 0;
-
+        
         
         for (idx, database) in self.databases.iter().enumerate() {
             if database
-                .get_database_name()
-                .unwrap_or_default()
-                .contains(&base_to_insert)
+            .get_database_name()
+            .unwrap_or_default()
+            .eq(&base_to_insert)
             {
                 current_database_index = idx;
                 break;
             }
         }
-
-
+        
+        
         if self.databases[current_database_index]
-            .table_exist::<T>(&self.client)
-            .await
+        .table_exist::<T>(&self.client)
+        .await
         {
             let table_name = T::get_struct();
-
+            
             match &self.databases[current_database_index].channel {
                 Channel::Channel(_) => {
                     let topic_peer = self.databases[current_database_index]
-                        .tables_peer
-                        .get(table_name)
-                        .unwrap();
-
+                    .tables_peer
+                    .get(table_name)
+                    .unwrap();
+                    
                     println!("{}", T::get_filds()[0].0);
                     let message = InputMessage::new()
-                        .text(format!("{}", value_to_insert))
-                        .reply_to(Some(*topic_peer));
-
+                    .text(format!("{}", value_to_insert))
+                    .reply_to(Some(*topic_peer));
+                    
                     println!("{}", value_to_insert);
-
+                    
                     match &self.databases[current_database_index].channel {
                         Channel::Channel(channel) => {
                             self.client.send_message(channel, message).await.unwrap();
@@ -594,11 +615,11 @@ impl Store {
                 }
             }
         }
-    
+        
         Ok(())
     }
     // pub async fn send_file();
-                // pub asynnc get_file()
+    // pub asynnc get_file()
 }
 
 
