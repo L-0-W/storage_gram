@@ -204,7 +204,7 @@ impl Database {
         let result_in_cloud = Database::exist_cloud(&database_name, client)
             .await
             .unwrap_or(false);
-
+        
         if !result_in_cloud && !result_in_local_file {
             return DatabaseExistResult::False;
         }
@@ -212,7 +212,7 @@ impl Database {
         if !result_in_cloud && result_in_local_file {
             return DatabaseExistResult::OnlyInLocal;
         }
- 
+
         if result_in_cloud && !result_in_local_file {
             return DatabaseExistResult::OnlyInCloud;
         }

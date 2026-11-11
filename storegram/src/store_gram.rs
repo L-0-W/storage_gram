@@ -4,7 +4,7 @@ use grammers_client::client::LoginToken;
 //use grammers_client::peer::Peer;
 use grammers_client::{Client, InvocationError, SenderPool, message::InputMessage, peer::User};
 use grammers_session::storages::SqliteSession;
-use grammers_tl_types::enums::messages::ForumTopics;
+use grammers_tl_types::enums::messages::{Dialogs, ForumTopics};
 use grammers_tl_types::enums::{ForumTopic, InputPeer, Message};
 use grammers_tl_types::types::{InputPeerChannel};
 
@@ -165,10 +165,10 @@ impl Store {
                                 let _ = &self.databases.push(database);
 
                                File::insert_base(
-    name.to_string(),
-    c.id.to_string(),
-    c.access_hash.unwrap_or_default().to_string(),
-);
+                                    name.to_string(),
+                                    c.id.to_string(),
+                                    c.access_hash.unwrap_or_default().to_string(),
+                                );
                             }
                             _ => eprintln!("ERRO AO MATCH u.chats"),
                         }
@@ -184,34 +184,71 @@ impl Store {
     }
     async fn create_db_local(&mut self, target_name: &str) -> std::result::Result<(), InvocationError> {
         
-        let result = self.client.invoke(&tl::functions::contacts::Search {
-            q: target_name.to_string(),
+        let res = self.client.invoke(&tl::functions::messages::GetDialogs {
+            exclude_pinned: false,
+            folder_id: None,
+            offset_date: 0,
+            offset_id: 0,
+            offset_peer: tl::enums::InputPeer::Empty,
             limit: 100,
-        }).await?;
-        
-        let tl::enums::contacts::Found::Found(found) = result;
-        
-        for chat in found.chats {
-            if let tl::enums::Chat::Channel(c) = chat {
-                
-                let titulo_bate = c.title.eq_ignore_ascii_case(target_name);
-                
-                if titulo_bate {
-                    File::insert_base(
-                        target_name.to_string(),
-                        c.id.to_string(),
-                        c.access_hash.unwrap_or_default().to_string(),
-                    );
+            hash: 0,
+        }).await?;        
+
+
+        let (_, _, chats, _, _) = match res {
+            Dialogs::Slice(d) => (d.dialogs, d.messages, d.chats, d.users, false),
+            Dialogs::Dialogs(d) => (d.dialogs, d.messages, d.chats, d.users, true),
+            Dialogs::NotModified(_) => unreachable!("")
+        };
+
+        for c in &chats {
+            match c {
+                tl::enums::Chat::Channel(c) => {
+                    let titulo_bate = c.title.eq_ignore_ascii_case(target_name);
                     
-                    let mut database = Database::default();
-                                
-                    database.set_channel(c.clone());
-                    let _ = &self.databases.push(database);
-                    
-                    return Ok(());
-                } 
+                    if titulo_bate {
+                        File::insert_base(
+                            target_name.to_string(),
+                            c.id.to_string(),
+                            c.access_hash.unwrap_or_default().to_string(),
+                        );
+                        
+                        let mut database = Database::default();
+                                    
+                        database.set_channel(c.clone());
+                        let _ = &self.databases.push(database);
+                        
+                        return Ok(());
+                    } 
+
+                },
+                _ => {}
             }
         }
+
+        // for chat in found.chats {
+        //     if let tl::enums::Chat::Channel(c) = chat {
+                
+        //         let titulo_bate = c.title.eq_ignore_ascii_case(target_name);
+
+        //         println!("{}", c.title);
+                
+        //         if titulo_bate {
+        //             File::insert_base(
+        //                 "UserDB".to_string(),
+        //                 c.id.to_string(),
+        //                 c.access_hash.unwrap_or_default().to_string(),
+        //             );
+                    
+        //             let mut database = Database::default();
+                                
+        //             database.set_channel(c.clone());
+        //             let _ = &self.databases.push(database);
+                    
+        //             return Ok(());
+        //         } 
+        //     }
+        // }
         
         return Err(InvocationError::InvalidDc);
     }

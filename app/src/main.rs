@@ -54,7 +54,9 @@ async fn main() {
         Connected(stt) => stt,
     };
 
+    
     {
+        // TODO - Mudar para formato "Store::create_db"
         let mut lock_store = store.lock().await;
         let db_creation_result = lock_store.create_db("UserDB").await;
 
