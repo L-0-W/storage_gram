@@ -54,20 +54,23 @@ async fn main() {
         Connected(stt) => stt,
     };
 
+    
     {
+        // TODO - Mudar para formato "Store::create_db"
         let mut lock_store = store.lock().await;
         let db_creation_result = lock_store.create_db("UserDB").await;
 
         if db_creation_result.is_err() {
             println!("ERRO AO CRIAR 'UserDB'");
+            db_creation_result.unwrap_err().get_error();
             return;
         }
     }
 
-    Store::create_table::<User>(Arc::clone(&store), String::from("UserDB"))
-        .await
-        .unwrap();
-
+    // TODO - Caso banco de dados ja esteja criado local ou cloud, verificar se table ja não existe
+    // seguindo isso, melhor refatoração e 
+    let _ = Store::create_table::<User>(Arc::clone(&store), String::from("UserDB"))
+        .await;
     {
         let mut locked_store = store.lock().await;
 
