@@ -7,8 +7,7 @@ use grammers_tl_types::{
 use std::sync::Arc;
 
 use crate::{
-    manager::{File, SearchResult},
-    store_gram::{self},
+    store_gram::{self}, telegram::TelegramUtils,
 };
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -102,7 +101,10 @@ impl DatabaseLocations for Memory {
 
 
 pub enum DatabaseExistResult {
-    OnlyIn((Cloud, Local, Memory)),
+    CloudOnly,
+    MemoryOnly,
+    True,
+    False
 }
 
 pub struct Database {
@@ -131,6 +133,19 @@ impl Database {
             Channel::Channel(c) => return Ok(c.title.to_string()),
             _ => Err(()),
         }
+    }
+
+    pub async fn get_databases(client: &Client) -> std::result::Result<Vec<tl::types::Channel>, ResultErrs> {
+        let databases_res = TelegramUtils::get_forums(client).await;
+
+        if databases_res.is_err() { return Err(ResultErrs::ErrInvoke(InvocationError::InvalidDc)) }
+
+        let databases = databases_res.unwrap();
+        if databases.is_empty() { return Err(ResultErrs::NoDatabasesInTheCloud) }
+
+
+        println!("A");
+        return Ok(databases)
     }
 
     pub fn set_table_fields(&mut self, table_fields: (Arc<str>, Vec<(Arc<str>, Arc<str>)>)) {
@@ -184,16 +199,16 @@ impl Database {
 
         let result_in_memory = self.tables_fields.contains_key(table_to_check);
 
-        let result_in_local_file = match File::search_table(table_to_check.to_string()) {
-            SearchResult::Ok(_) => true,
-            _ => false,
-        };
+        // let result_in_local_file = match File::search_table(table_to_check) {
+        //     SearchResult::Ok(_) => true,
+        //     _ => false,
+        // };
 
         let result_in_cloud = self
             .talbe_exist_in_cloud(client, table_to_check.to_string())
             .await;
 
-        if result_in_memory || result_in_local_file || result_in_cloud {
+        if result_in_memory  || result_in_cloud {
             true
         } else {
             false
@@ -214,17 +229,41 @@ impl Database {
         Ok(false)
     }
 
-    pub async fn exist(database_name: &String, client: &Client) -> DatabaseExistResult {
-        let result_in_local_file = match File::search_base(database_name.to_string()) {
-            SearchResult::Ok(_) => true,
-            _ => false,
+    fn exist_memory(databases: &[Database], database_name: &String) -> Result<bool> {
+
+        for database in databases {
+           if database.get_database_name().unwrap_or_default().eq(database_name) {
+                return Ok(true);
+           }
         };
+
+        Ok(false)
+    }
+    pub async fn exist(databases: &[Database], database_name: &String, client: &Client) -> DatabaseExistResult {
+        // let result_in_local_file = match File::search_base(database_name) {
+        //     SearchResult::Ok(_) => true,
+        //     _ => false,
+        // };
 
         let result_in_cloud = Database::exist_cloud(&database_name, client)
             .await
             .unwrap_or(false);
+
+        let result_in_memory = Database::exist_memory(databases, database_name).unwrap_or(false);
         
-        return DatabaseExistResult::OnlyIn((Cloud(result_in_cloud), Local(result_in_local_file), Memory(false)));
+        if !result_in_cloud && !result_in_memory {
+            return DatabaseExistResult::False;
+        }
+
+        if !result_in_cloud {
+            return DatabaseExistResult::MemoryOnly;
+        }
+
+        if !result_in_memory {
+            return DatabaseExistResult::CloudOnly
+        }
+
+        return DatabaseExistResult::True
     }
 }
 
@@ -243,14 +282,36 @@ pub trait StoreTableTrait {
     fn get_struct() -> &'static str;
 }
 
+#[derive(Debug)]
 pub enum ResultErrs {
     ErrInicializeDataBase,
+    DatabaseAlredyExist,
     ClientNotLogged,
     #[allow(unused)]
     ErrInvoke(InvocationError),
     TableAlreadyExist,
+    JoinHandle,
     DatabaseDoNotExist,
     TablePeerNotFound,
     TableDoNotExist,
+    ErrMatcingUpdateInDatabaseCreation,
+    NoDatabasesInTheCloud,
     Ok,
 }
+
+pub struct StoragramErros {
+    err: ResultErrs,
+    line: String,
+    file: String,    
+}
+
+impl  StoragramErros {
+    pub fn default(err: ResultErrs, line: String, file: String) -> Self {
+        Self { err: err, line, file }
+    } 
+
+    pub fn get_error(&self) {
+        println!("{:?}  - Line: {}  - File: {}", self.err, self.line, self.file)
+    } 
+}
+
