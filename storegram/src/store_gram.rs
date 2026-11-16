@@ -1,12 +1,10 @@
-use std::{collections::hash_map::Values, io, sync::Arc};
+use std::{io, sync::Arc};
 
 use grammers_client::client::LoginToken;
 //use grammers_client::peer::Peer;
 use grammers_client::{Client, InvocationError, SenderPool, message::InputMessage, peer::User};
 use grammers_session::storages::SqliteSession;
-use grammers_tl_types::enums::messages::{ForumTopics};
-use grammers_tl_types::enums::{ForumTopic, InputPeer, Message};
-use grammers_tl_types::types::{InputPeerChannel};
+use grammers_tl_types::enums::{ForumTopic, Message};
 
 use crate::telegram::TelegramUtils;
 use crate::types::{
@@ -390,7 +388,7 @@ impl Store {
         let fields: Vec<(Arc<str>, Arc<str>)> = F::get_filds();
         let struct_name: &str = F::get_struct();
         
-        self.databases[current_database_index]
+       let _ = self.databases[current_database_index]
         .set_table_fields((Arc::from(struct_name), fields.clone()));
         
         if let Ok(logged) = self.client.is_authorized().await
@@ -488,14 +486,14 @@ impl Store {
     pub fn show_db_tables(
         &self,
         base: String,
-    ) -> std::result::Result<Values<'_, Arc<str>, Vec<(Arc<str>, Arc<str>)>>, ResultErrs> {
+    ) -> std::result::Result<Vec<(Arc<str>, Vec<[Arc<str>; 2]>)>, ResultErrs> {
         for database in &self.databases {
             if database
             .get_database_name()
             .unwrap_or_default()
             .contains(&base)
             {
-                let table_names = database.tables_fields.values();
+                let table_names = database.tables.get_database_tables();
                 return Ok(table_names);
             }
         }
@@ -543,15 +541,13 @@ impl Store {
             
             match &self.databases[current_database_index].channel {
                 Channel::Channel(_) => {
-                    let topic_peer = self.databases[current_database_index]
-                    .tables_peer
-                    .get(table_name)
-                    .unwrap();
+                    let topic_peer = self.databases[current_database_index].tables.get_table_by_name(table_name).map_or_default(|t| t.get_peer());
+
                     
                     println!("{}", T::get_filds()[0].0);
                     let message = InputMessage::new()
                     .text(format!("{}", value_to_insert))
-                    .reply_to(Some(*topic_peer));
+                    .reply_to(Some(topic_peer));
                     
                     println!("{}", value_to_insert);
                     
