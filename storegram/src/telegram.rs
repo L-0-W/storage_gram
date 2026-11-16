@@ -1,12 +1,11 @@
 use grammers_client::{Client, InvocationError};
-use grammers_tl_types::enums::Updates;
-use grammers_tl_types::enums::messages::Dialogs;
+use grammers_tl_types::enums::{InputPeer, Updates};
+use grammers_tl_types::enums::messages::{Dialogs, ForumTopics};
 
+use grammers_tl_types::types::{InputPeerChannel};
 use grammers_tl_types::{self as tl};
 
 use crate::types::{ResultErrs, StoragramErros};
-
-type ForumTopics = Vec<grammers_tl_types::enums::ForumTopic>;
 
 
 pub struct TelegramUtils {}
@@ -82,7 +81,7 @@ impl TelegramUtils {
         return Ok(databases);
     }
  
-    pub async fn get_forum_topics(target_name: &str, client: &Client) -> std::result::Result<ForumTopics, ()> {
+    pub async fn get_forum_topics(target_name: &str, client: &Client) -> std::result::Result<Vec<tl::enums::ForumTopic>, ()> {
         
         let res = TelegramUtils::get_forum(target_name, client).await;
         
@@ -144,7 +143,32 @@ impl TelegramUtils {
                         
         Err(())
     }
-    
+
+    pub async fn get_forum_topics_by_id(topics: Vec<i32>, channel_id: i64, acess_hash: i64, client: &Client) -> std::result::Result<tl::types::messages::ForumTopics, ()> {
+                                
+        let myi = InputPeer::Channel(InputPeerChannel {
+            channel_id: channel_id,
+            access_hash: acess_hash,
+        });
+        
+        let request = tl::functions::messages::GetForumTopicsById {
+            peer: myi,
+            topics: topics,
+        };
+        
+        let Ok(forum_topic) = client.invoke(&request).await else {
+            println!("NEMHUM FORUM ENCONTRADO");
+            return Err(());
+        };
+        
+        match forum_topic {
+            ForumTopics::Topics(c) => {
+                return Ok(c);
+            }
+        }
+
+    }
+
     
     pub async fn create_forum(client: &Client, forum_name: &str) -> std::result::Result<tl::types::Channel, StoragramErros> {
         if client.is_authorized().await.unwrap_or(false) {

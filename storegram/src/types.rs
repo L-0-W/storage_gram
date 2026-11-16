@@ -28,9 +28,6 @@ impl TelegramAPP {
     }
 }
 
-//type TableFields = Vec<(&'static str, Vec<(&'static str, &'static str)>)>;
-type TableFields = std::collections::HashMap<Arc<str>, Vec<(Arc<str>, Arc<str>)>>;
-type TablePeer = std::collections::HashMap<Arc<str>, i32>;
 
 pub enum Login {
     Verification((LoginToken, Client)),
@@ -107,20 +104,52 @@ pub enum DatabaseExistResult {
     False
 }
 
+pub struct TableField {
+    name: Arc<str>,
+    field_type: Arc<str>
+}
+pub struct Table {
+    name: Arc<str>,
+    peer: i32, 
+    fields: Vec<TableField>,
+}
+
+impl Table {
+    pub fn default(name: Arc<str>, peer: i32) -> Self {
+        Self { name, peer, fields: vec![] }
+    }
+}
+
+
+pub struct Tables(std::collections::HashMap<Arc<str>, Table>);
+
+impl Tables {
+    pub fn get_forums_peer(&self) -> Vec<i32> {
+        self.0.values().map(|item| item.peer).collect::<Vec<i32>>()
+    }
+
+    pub fn insert_table(&mut self, peer: i32, name: Arc<str>) -> std::result::Result<(), ()> {
+
+        let table = Table::default(Arc::clone(&name), peer);
+        self.0.insert(Arc::clone(&name), table);
+
+        todo!()
+    }
+}
+
+
 pub struct Database {
     pub channel: Channel,
-    pub tables_fields: TableFields,
-    pub tables_peer: TablePeer,
+    pub tables: Tables,
 }
 
 
 impl Database {
     #[allow(unused)]
-    pub fn new(channel: Channel, tables_fields: TableFields, tables_peer: TablePeer) -> Self {
+    pub fn new(channel: Channel, tables: Tables) -> Self {
         Self {
             channel,
-            tables_fields,
-            tables_peer,
+            tables
         }
     }
 
