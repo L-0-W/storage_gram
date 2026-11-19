@@ -81,11 +81,9 @@ impl TelegramUtils {
         return Ok(databases);
     }
     
-    pub fn get_peer_name_from_topic(topic: &ForumTopic) -> Option<(i64, String)> {
+    pub fn get_peer_name_from_topic(topic: &ForumTopic) -> Option<(i32, String)> {
         if let tl::enums::ForumTopic::Topic(t) = topic {
-            if let tl::enums::Peer::Channel(peer) = &t.peer {
-                return Some((peer.channel_id, t.title.to_string()))
-            }
+            return Some((t.id, t.title.to_string()))
         }
 
         return None

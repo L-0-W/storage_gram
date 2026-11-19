@@ -203,11 +203,12 @@ impl Store {
         return Ok(())
     }
     
+    #[allow(unused)]
     async fn create_table_memory(&mut self, topics: Vec<ForumTopic>, database: usize) {
         for topic in &topics {
             if let tl::enums::ForumTopic::Topic(t) = topic {
                 if let tl::enums::Peer::Channel(peer) = &t.peer {
-                    if !t.title.eq("General"){
+                    if !t.title.eq("General") {
                         let _ =&self.databases[database].tables.insert_table(peer.channel_id as i32, Arc::from(t.title.as_str()));
                     }
                 }
@@ -232,30 +233,6 @@ impl Store {
             }
         }
         
-        
-        let Some((us, database))= self.databases.iter().enumerate().find_map(|(us, db)| if db.get_database_name().eq(name) { return Some((us, db)) } else { None }) else {
-            return Ok(());
-        };
-        
-        
-        match Tables::exist(database, &self.client).await {
-            ExistResult::CloudOnly => { 
-                println!("[create_db] - [Tables::exist] - CREATING IN MEMORY");
-                self.create_table_memory(Tables::get_cloud(database, &self.client).await, us).await
-            }
-            ExistResult::MemoryOnly => {
-                println!("[create_db] - [Tables::exist] - CREATING IN CLOUD");
-                let tables = Tables::get_memory(database).await;
-                let _ =self.create_table_cloud(tables, us).await.map_err(|err| return err);
-            }
-            ExistResult::False => {
-                println!("[create_db] - [Tables::exist] - DO NOT EXIST");
-
-            }
-            ExistResult::True => {
-               println!("[create_db] - [Tables::exist] - ALREADY EXIST");
-            }
-        }
         
         return Ok(())
         // match Table::exist
@@ -372,20 +349,23 @@ impl Store {
                 });
 
                 let topic = result.unwrap();
-                let _ =&self.databases[current_database_index].tables.insert_table(topic.0 as i32, Arc::from(topic.1.as_str()));
+                let _ =&self.databases[current_database_index].tables.insert_table(topic.0, Arc::from(topic.1.as_str()));
+
+                return Ok(())
             }
             ExistResult::MemoryOnly => {
                 println!("[telegram_create_table] - [Table::exist] - CREATING IN CLOUD");
                 let tables = &self.databases[current_database_index].tables;
                 let _ =self.create_table_cloud(tables, current_database_index).await.map_err(|err| return err);
-            }
-            ExistResult::False => {
-                println!("[telegram_create_table] - [Table::exist] - DO NOT EXIST");
 
+                return Ok(())
             }
             ExistResult::True => {
                 println!("[telegram_create_table] - [Table::exist] - ALREADY EXIST");
                 return Err(StoragramErros::default(ResultErrs::TableAlreadyExist, line!().to_string(), file!().to_string()));
+            }
+            ExistResult::False => {
+                println!("[telegram_create_table] - [Table::exist] - DO NOT EXIST");
             }
         } 
         
@@ -544,6 +524,8 @@ impl Store {
             
             match &self.databases[current_database_index].channel {
                 Channel::Channel(_) => {
+                    let table = self.databases[current_database_index].tables.get_table_by_name(table_name).unwrap();
+                    println!("{} - {}", table.get_name(), table.get_peer());
                     let topic_peer = self.databases[current_database_index].tables.get_table_by_name(table_name).map_or_default(|t| t.get_peer());
                     
                     

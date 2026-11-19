@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 use std::{fmt, io};
 use storegram::types::Login::{Connected, Verification};
 use storegram::{
@@ -86,6 +87,28 @@ async fn main() {
     }
 
     store.lock().await.get(String::from("UserDB")).await;
+
+
+    loop {
+
+       let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Failed to read line");
+
+        let Ok(inptu_nm) = input.trim().parse::<i32>() else {
+            continue;
+        };
+
+        println!("{}", inptu_nm);
+
+        if inptu_nm == 1 {
+            println!("[INSERTING] - USER");
+            let _ = Store::create_table::<User>(Arc::clone(&store), String::from("UserDB")).await;
+        }
+
+        std::thread::sleep(Duration::from_secs(2));
+    }
 
     // Store::from_::<User>()
     //     .select(["Nome", "Idade"])
