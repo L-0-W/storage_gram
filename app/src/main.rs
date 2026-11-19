@@ -87,10 +87,10 @@ async fn main() {
 
     store.lock().await.get(String::from("UserDB")).await;
 
-    Store::from_::<User>()
-        .select(["Nome", "Idade"])
-        .where_(|user| user.idade > 25)
-        .run();
+    // Store::from_::<User>()
+    //     .select(["Nome", "Idade"])
+    //     .where_(|user| user.idade > 25)
+    //     .run();
 
 
 }

@@ -1,5 +1,5 @@
 use grammers_client::{Client, InvocationError};
-use grammers_tl_types::enums::{InputPeer, Updates};
+use grammers_tl_types::enums::{ForumTopic, InputPeer, Updates};
 use grammers_tl_types::enums::messages::{Dialogs, ForumTopics};
 
 use grammers_tl_types::types::{InputPeerChannel};
@@ -81,8 +81,19 @@ impl TelegramUtils {
         return Ok(databases);
     }
     
-    pub async fn get_forum_topics(target_name: &str, client: &Client) -> std::result::Result<Vec<tl::enums::ForumTopic>, ()> {
-        
+    pub fn get_peer_name_from_topic(topic: &ForumTopic) -> Option<(i64, String)> {
+        if let tl::enums::ForumTopic::Topic(t) = topic {
+            if let tl::enums::Peer::Channel(peer) = &t.peer {
+                return Some((peer.channel_id, t.title.to_string()))
+            }
+        }
+
+        return None
+    }
+
+
+
+    pub async fn get_forum_topics(target_name: &str, client: &Client) -> std::result::Result<Vec<tl::enums::ForumTopic>, ()> {        
         let res = TelegramUtils::get_forum(target_name, client).await;
         
         if res.is_err() {
@@ -107,14 +118,14 @@ impl TelegramUtils {
         
         let tl::enums::messages::ForumTopics::Topics(res) = res;
         
-        for topic in &res.topics {
-            if let tl::enums::ForumTopic::Topic(t) = topic {
-                println!(
-                    "id={} | título={} | fechado={} | fixado={} | top_message={}",
-                    t.id, t.title, t.closed, t.pinned, t.top_message
-                );
-            }
-        }
+        // for topic in &res.topics {
+        //     if let tl::enums::ForumTopic::Topic(t) = topic {
+        //         println!(
+        //             "id={} | título={} | fechado={} | fixado={} | top_message={}",
+        //             t.id, t.title, t.closed, t.pinned, t.top_message
+        //         );
+        //     }
+        // }
         
         return Ok(res.topics);        
     }
@@ -169,6 +180,21 @@ impl TelegramUtils {
         
     }
     
+    pub async fn forum_topic_exist(topic_name: &str, forum_name: &str, client: &Client) -> bool {
+        
+        let Ok(topics) = TelegramUtils::get_forum_topics(forum_name, client).await else {
+            return false;
+        };
+        
+        for topic in &topics {
+            if let tl::enums::ForumTopic::Topic(t) = topic {
+                if t.title.eq(topic_name) { return true; }
+            }
+        }
+        
+        
+        return false
+    }
     
     pub async fn create_forum(client: &Client, forum_name: &str) -> std::result::Result<tl::types::Channel, StoragramErros> {
         if client.is_authorized().await.unwrap_or(false) {
@@ -245,7 +271,7 @@ impl TelegramUtils {
         })
     }
     
-    pub fn match_topic_create<F>(enums: Updates, f: F) -> std::result::Result<(), StoragramErros> where F: Fn() {
+    fn match_topic_create<F>(enums: Updates, f: F) -> std::result::Result<(), StoragramErros> where F: Fn() {
         match enums {
             tl::enums::Updates::Updates(updates) => {
                 for update in updates.updates {

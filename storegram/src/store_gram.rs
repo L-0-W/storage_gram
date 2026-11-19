@@ -8,7 +8,7 @@ use grammers_tl_types::enums::{ForumTopic, Message};
 
 use crate::telegram::TelegramUtils;
 use crate::types::{
-    Channel, Database, DatabaseExistResult, Login, Result, ResultErrs, SelectFilters, StoragramErros, StoreTableTrait, TelegramAPP,
+    Channel, Database, ExistResult, Login, Result, ResultErrs, SelectFilters, StoragramErros, StoreTableTrait, Table, Tables, TelegramAPP,
 };
 
 use grammers_tl_types::{self as tl, enums::Updates};
@@ -139,88 +139,17 @@ impl Store {
         
         Err(StoragramErros::default(ResultErrs::ClientNotLogged,  line!().to_string(), file!().to_string()))
     }
-    // async fn create_db_local(&mut self, target_name: &str) -> std::result::Result<(), InvocationError> {
     
-    //     let res = self.client.invoke(&tl::functions::messages::GetDialogs {
-    //         exclude_pinned: false,
-    //         folder_id: None,
-    //         offset_date: 0,
-    //         offset_id: 0,
-    //         offset_peer: tl::enums::InputPeer::Empty,
-    //         limit: 100,
-    //         hash: 0,
-    //     }).await?;        
-    
-    
-    //     let (_, _, chats, _, _) = match res {
-    //         Dialogs::Slice(d) => (d.dialogs, d.messages, d.chats, d.users, false),
-    //         Dialogs::Dialogs(d) => (d.dialogs, d.messages, d.chats, d.users, true),
-    //         Dialogs::NotModified(_) => unreachable!("")
-    //     };
-    
-    //     for c in &chats {
-    //         match c {
-    //             tl::enums::Chat::Channel(c) => {
-    //                 let titulo_bate = c.title.eq_ignore_ascii_case(target_name);
-    
-    //                 if titulo_bate {
-    //                     println!("ACESS_HASH: {}  | PEER: {}", c.access_hash.unwrap_or_default(), c.id);
-    //                     // File::insert_base(
-    //                     //     target_name.to_string(),
-    //                     //     c.id.to_string(),
-    //                     //     c.access_hash.unwrap_or_default().to_string(),
-    //                     // );
-    
-    //                     let mut database = Database::default();
-    
-    //                     database.set_channel(c.clone());
-    //                     let _ = &self.databases.push(database);
-    
-    //                     return Ok(());
-    //                 } 
-    
-    //             },
-    //             _ => {}
-    //         }
-    //     }
-    
-    //     // for chat in found.chats {
-    //     //     if let tl::enums::Chat::Channel(c) = chat {
-    
-    //     //         let titulo_bate = c.title.eq_ignore_ascii_case(target_name);
-    
-    //     //         println!("{}", c.title);
-    
-    //     //         if titulo_bate {
-    //     //             File::insert_base(
-    //     //                 "UserDB".to_string(),
-    //     //                 c.id.to_string(),
-    //     //                 c.access_hash.unwrap_or_default().to_string(),
-    //     //             );
-    
-    //     //             let mut database = Database::default();
-    
-    //     //             database.set_channel(c.clone());
-    //     //             let _ = &self.databases.push(database);
-    
-    //     //             return Ok(());
-    //     //         } 
-    //     //     }
-    //     // }
-    
-    //     return Err(InvocationError::InvalidDc);
-    // }
-    
-    async fn create_db_memory(&mut self, _: &str) -> std::result::Result<(), StoragramErros> {
+    async fn create_db_memory(&mut self, name: &str) -> std::result::Result<(), StoragramErros> {
+        
         
         let channels = Database::get_databases(&self.client).await;
         
         
         for channel in channels.unwrap_or_default() {
             let mut database = Database::default();
-            database.set_channel(channel);
-            //database.set_table_fields(table_fields);
-            
+            database.set_channel(channel); 
+            database.set_name(name.to_string());           
             self.databases.push(database);
         }
         
@@ -258,15 +187,44 @@ impl Store {
         
         return  Ok(());
     }
+    
+    async fn create_table_cloud(&self, tables: &Tables, database: usize) -> std::result::Result<(), StoragramErros> {
+        let topics_to_create = tables.get_database_tables();
+        
+        let channel = match &self.databases[database].channel {
+            Channel::Channel(c) => c,
+            _ => return Err(StoragramErros::default(ResultErrs::DatabaseDoNotExist, line!().to_string(), file!().to_string())),
+        };
+        
+        for topic_to_create in topics_to_create {            
+            TelegramUtils::create_topic(channel, &self.client, &topic_to_create.0).await?
+        }
+        
+        return Ok(())
+    }
+    
+    async fn create_table_memory(&mut self, topics: Vec<ForumTopic>, database: usize) {
+        for topic in &topics {
+            if let tl::enums::ForumTopic::Topic(t) = topic {
+                if let tl::enums::Peer::Channel(peer) = &t.peer {
+                    if !t.title.eq("General"){
+                        let _ =&self.databases[database].tables.insert_table(peer.channel_id as i32, Arc::from(t.title.as_str()));
+                    }
+                }
+            }           
+        }
+    }
+    
     //TODO - 'create_db_cloud' deveria apenas fazer a criação no cloud, sem chamar File::insert_db, isso deveira acontecer aqui em create_db
     // para que faça sentindo, em ::False a chamada de 'create_db_cloud' e 'create_db_local'
     pub async fn create_db(&mut self, name: &str) -> std::result::Result<(), StoragramErros> {
         
         match Database::exist(&self.databases, &name.to_string(), &self.client).await {
-            DatabaseExistResult::CloudOnly => { self.create_db_memory(name).await.map_err(|err| return err) },
-            DatabaseExistResult::MemoryOnly => { self.create_db_cloud(name).await.map_err(|err| return err) },
-            DatabaseExistResult::True => { return Err(StoragramErros::default(ResultErrs::DatabaseAlredyExist, line!().to_string(), file!().to_string())) },
-            DatabaseExistResult::False => {
+            ExistResult::CloudOnly => { let _ =self.create_db_memory(name).await.map_err(|err| return err); },
+            ExistResult::MemoryOnly => { let _ =self.create_db_cloud(name).await.map_err(|err| return err); },
+            ExistResult::True => { println!("DATABASE ALREADY EXIST") },
+            ExistResult::False => {
+                println!("CREATING DATABASE");
                 let _ = self.create_db_cloud(name).await?;
                 let _ = self.create_db_memory(name).await?; 
                 
@@ -274,6 +232,33 @@ impl Store {
             }
         }
         
+        
+        let Some((us, database))= self.databases.iter().enumerate().find_map(|(us, db)| if db.get_database_name().eq(name) { return Some((us, db)) } else { None }) else {
+            return Ok(());
+        };
+        
+        
+        match Tables::exist(database, &self.client).await {
+            ExistResult::CloudOnly => { 
+                println!("[create_db] - [Tables::exist] - CREATING IN MEMORY");
+                self.create_table_memory(Tables::get_cloud(database, &self.client).await, us).await
+            }
+            ExistResult::MemoryOnly => {
+                println!("[create_db] - [Tables::exist] - CREATING IN CLOUD");
+                let tables = Tables::get_memory(database).await;
+                let _ =self.create_table_cloud(tables, us).await.map_err(|err| return err);
+            }
+            ExistResult::False => {
+                println!("[create_db] - [Tables::exist] - DO NOT EXIST");
+
+            }
+            ExistResult::True => {
+               println!("[create_db] - [Tables::exist] - ALREADY EXIST");
+            }
+        }
+        
+        return Ok(())
+        // match Table::exist
     }
     
     pub async fn get(&self, from_base: String) {
@@ -283,8 +268,7 @@ impl Store {
         for (idx, database) in self.databases.iter().enumerate() {
             if database
             .get_database_name()
-            .unwrap_or_default()
-            .contains(&from_base)
+            .eq(&from_base)
             {
                 current_database_index = idx;
                 //db_exist = true;
@@ -353,13 +337,13 @@ impl Store {
         
         
         match Database::exist(&self.databases, &base.to_string(), &self.client).await {
-            DatabaseExistResult::CloudOnly => { return self.create_db_memory(&base).await.map_err(|err| return err) },
-            DatabaseExistResult::MemoryOnly => { return self.create_db_cloud(&base).await.map_err(|err| return err) },
-            DatabaseExistResult::False => {
+            ExistResult::CloudOnly => { return self.create_db_memory(&base).await.map_err(|err| return err) },
+            ExistResult::MemoryOnly => { return self.create_db_cloud(&base).await.map_err(|err| return err) },
+            ExistResult::False => {
                 println!("DATABASE NÂO EXISTE"); 
                 return Err(StoragramErros::default(ResultErrs::DatabaseDoNotExist, line!().to_string(), file!().to_string()));
             }
-            DatabaseExistResult::True => {},
+            ExistResult::True => {},
         };
         
         
@@ -369,26 +353,47 @@ impl Store {
         for (idx, database) in self.databases.iter().enumerate() {
             if database
             .get_database_name()
-            .unwrap_or_default()
-            .contains(&base)
+            .eq(&base)
             {
                 current_database_index = idx;
                 break;
             }
         }
         
-        if self.databases[current_database_index]
-        .table_exist::<F>(&self.client)
-        .await
-        {
-            eprintln!("TABLE JA EXISTE");
-            return Err(StoragramErros::default(ResultErrs::TableAlreadyExist, line!().to_string(), file!().to_string()));
-        };
+        match Table::exist::<F>(&self.databases[current_database_index], &self.client).await {
+            ExistResult::CloudOnly => { 
+                println!("[telegram_create_table] - [Table::exist] - CREATING IN MEMORY");
+                let target_name = self.databases[current_database_index].get_database_name();
+                let topics =TelegramUtils::get_forum_topics(target_name, &self.client).await.unwrap();
+                let result = topics.iter().find_map(|topic| {
+                    let Some((peer, name)) = TelegramUtils::get_peer_name_from_topic(topic) else {return None};
+                    
+                    if name.eq(F::get_struct()) { return Some((peer, name)) } else { return None; }
+                });
+
+                let topic = result.unwrap();
+                let _ =&self.databases[current_database_index].tables.insert_table(topic.0 as i32, Arc::from(topic.1.as_str()));
+            }
+            ExistResult::MemoryOnly => {
+                println!("[telegram_create_table] - [Table::exist] - CREATING IN CLOUD");
+                let tables = &self.databases[current_database_index].tables;
+                let _ =self.create_table_cloud(tables, current_database_index).await.map_err(|err| return err);
+            }
+            ExistResult::False => {
+                println!("[telegram_create_table] - [Table::exist] - DO NOT EXIST");
+
+            }
+            ExistResult::True => {
+                println!("[telegram_create_table] - [Table::exist] - ALREADY EXIST");
+                return Err(StoragramErros::default(ResultErrs::TableAlreadyExist, line!().to_string(), file!().to_string()));
+            }
+        } 
+        
         
         let fields: Vec<(Arc<str>, Arc<str>)> = F::get_filds();
         let struct_name: &str = F::get_struct();
         
-       let _ = self.databases[current_database_index]
+        let _ = self.databases[current_database_index]
         .set_table_fields((Arc::from(struct_name), fields.clone()));
         
         if let Ok(logged) = self.client.is_authorized().await
@@ -443,7 +448,7 @@ impl Store {
                                                         
                                                         let _ = &self.databases
                                                         [current_database_index].tables.insert_table(service.id, Arc::from(struct_name));
-
+                                                        
                                                         
                                                         // let fields_str = fields
                                                         // .iter()
@@ -490,7 +495,6 @@ impl Store {
         for database in &self.databases {
             if database
             .get_database_name()
-            .unwrap_or_default()
             .contains(&base)
             {
                 let table_names = database.tables.get_database_tables();
@@ -509,13 +513,13 @@ impl Store {
         
         
         match Database::exist(&self.databases, &base_to_insert.to_string(), &self.client).await {
-            DatabaseExistResult::CloudOnly => { return self.create_db_memory(&base_to_insert).await.map_err(|err| return err) },
-            DatabaseExistResult::MemoryOnly => { return self.create_db_cloud(&base_to_insert).await.map_err(|err| return err) },
-            DatabaseExistResult::False => {
+            ExistResult::CloudOnly => { return self.create_db_memory(&base_to_insert).await.map_err(|err| return err) },
+            ExistResult::MemoryOnly => { return self.create_db_cloud(&base_to_insert).await.map_err(|err| return err) },
+            ExistResult::False => {
                 println!("DATABASE NÂO EXISTE"); 
                 return Err(StoragramErros::default(ResultErrs::DatabaseDoNotExist, line!().to_string(), file!().to_string()));
             }
-            DatabaseExistResult::True => {},
+            ExistResult::True => {},
         };
         
         let mut current_database_index: usize = 0;
@@ -524,7 +528,6 @@ impl Store {
         for (idx, database) in self.databases.iter().enumerate() {
             if database
             .get_database_name()
-            .unwrap_or_default()
             .eq(&base_to_insert)
             {
                 current_database_index = idx;
@@ -542,7 +545,7 @@ impl Store {
             match &self.databases[current_database_index].channel {
                 Channel::Channel(_) => {
                     let topic_peer = self.databases[current_database_index].tables.get_table_by_name(table_name).map_or_default(|t| t.get_peer());
-
+                    
                     
                     println!("{}", T::get_filds()[0].0);
                     let message = InputMessage::new()
