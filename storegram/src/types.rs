@@ -1,10 +1,6 @@
 use grammers_client::{Client, InvocationError, client::LoginToken};
-use grammers_tl_types::{
-    self as tl,
-    enums::{ForumTopic, InputPeer, messages::ForumTopics},
-    types::InputPeerChannel,
-};
-use std::sync::Arc;
+use grammers_tl_types::{self as tl, enums::ForumTopic};
+use std::{sync::Arc};
 
 use crate::{
     store_gram::{self}, telegram::TelegramUtils,
@@ -28,9 +24,6 @@ impl TelegramAPP {
     }
 }
 
-//type TableFields = Vec<(&'static str, Vec<(&'static str, &'static str)>)>;
-type TableFields = std::collections::HashMap<Arc<str>, Vec<(Arc<str>, Arc<str>)>>;
-type TablePeer = std::collections::HashMap<Arc<str>, i32>;
 
 pub enum Login {
     Verification((LoginToken, Client)),
@@ -100,27 +93,211 @@ impl DatabaseLocations for Memory {
 }
 
 
-pub enum DatabaseExistResult {
+pub enum ExistResult {
     CloudOnly,
     MemoryOnly,
     True,
     False
 }
 
+
+pub struct TableField {
+    name: Arc<str>,
+    field_type: Arc<str>
+}
+
+impl TableField {
+    pub fn to_string(&self) -> [Arc<str>; 2] {
+        return [Arc::clone(&self.name), Arc::clone(&self.field_type)]
+    }
+
+    pub fn new(name: Arc<str>, field_type: Arc<str>) -> Self {
+        Self { name, field_type }
+    }
+}
+
+pub struct Table {
+    name: Arc<str>,
+    peer: i32, 
+    fields: Vec<TableField>,
+}
+
+impl Table {
+    pub fn default(name: Arc<str>, peer: i32) -> Self {
+        Self { name, peer, fields: vec![] }
+    }
+
+    pub fn to_string(&self) -> (Arc<str>, Vec<[Arc<str>; 2]>) {
+        let table_fields_str_vec = self.fields.iter().map(|f| f.to_string()).collect::<Vec<[Arc<str>; 2]>>();
+        return (Arc::clone(&self.name), table_fields_str_vec);
+    }
+
+    pub fn insert_field(&mut self, name: &str, field_type: &str)  {
+        let  table_fields = TableField::new(Arc::from(name), Arc::from(field_type));
+        self.fields.push(table_fields);
+    }
+
+    pub fn get_peer(&self) -> i32 {
+        self.peer
+    }
+
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    async fn table_exist_cloud(database: &Database, table_name: &str, client: &Client) -> bool {
+        let target_name = database.get_database_name();
+
+        let Ok(forum_topics) = TelegramUtils::get_forum_topics(target_name, client).await else {
+            return false;
+        };
+
+        if forum_topics.is_empty() { return false }
+        if !TelegramUtils::forum_topic_exist(table_name, database.get_database_name(), client).await { return  false };
+
+        return true;
+    }
+
+    fn table_exist_memory(database: &Database, table_name: &str) -> bool {
+        let tables = &database.tables.0;
+        
+        
+        if tables.is_empty() { return false }
+        if !tables.contains_key(table_name) { return false }
+
+
+        return true;        
+    }
+
+    pub async fn exist<T: StoreTableTrait>(database: &Database, client: &Client) -> ExistResult {
+        let table_name = T::get_struct();
+
+        let result_cloud = Table::table_exist_cloud(database, table_name, client).await;
+        let result_memory = Table::table_exist_memory(database, table_name);
+
+
+        if !result_cloud && !result_memory { return ExistResult::False }
+        if result_cloud && !result_memory { return ExistResult::CloudOnly }
+        if !result_cloud && result_memory { return ExistResult::MemoryOnly }
+
+        return ExistResult::True
+    }
+
+}
+
+
+pub struct Tables(std::collections::HashMap<Arc<str>, Table>);
+
+
+impl Tables {
+    pub fn default() -> Self {
+        Self(std::collections::HashMap::new())
+    }
+
+    pub fn table_exist(&self, table_name: &str) -> bool {
+        self.0.contains_key(table_name)
+    }
+
+    pub fn get_forums_peer(&self) -> Vec<i32> {
+        self.0.values().map(|item| item.peer).collect::<Vec<i32>>()
+    }
+
+    pub fn insert_table(&mut self, peer: i32, name: Arc<str>) {
+        let table = Table::default(Arc::clone(&name), peer);
+        self.0.insert(Arc::clone(&name), table);
+
+    }
+
+    pub fn get_table_by_name(&self, name: &str) -> std::result::Result<&Table, ()> {
+        let Some(table) = self.0.get(name) else { return Err(()); };
+        return Ok(table)
+    }
+
+
+    pub fn get_mut_table_by_name(&mut self, name: &str) -> std::result::Result<&mut Table, ()> {
+        let Some(table) = self.0.get_mut(name) else { return Err(()); };
+        return Ok(table)
+    }
+
+    pub fn get_database_tables(&self) -> Vec<(Arc<str>, Vec<[Arc<str>; 2]>)> {
+        self.0.values().into_iter().map(|v| v.to_string()).collect()
+    }
+
+
+    async fn tables_exist_cloud(database: &Database, client: &Client) -> bool {
+        let target_name = database.get_database_name();
+
+        let Ok(forum_topic) = TelegramUtils::get_forum_topics(target_name, client).await else {
+            return false;
+        };
+
+        if forum_topic.is_empty() { return false }
+
+
+        return true;
+    }
+
+
+
+    fn tables_exist_memory(database: &Database) -> bool {
+        let tables = database.tables.get_database_tables();
+        
+        if tables.is_empty() { return false }
+
+        return true;        
+    }
+
+    pub async fn exist(database: &Database, client: &Client) -> ExistResult {
+        let result_cloud = Tables::tables_exist_cloud(database, client).await;
+        let result_memory = Tables::tables_exist_memory(database);
+
+
+        if !result_cloud && !result_memory { return ExistResult::False }
+        if result_cloud && !result_memory { return ExistResult::CloudOnly }
+        if !result_cloud && result_memory { return ExistResult::MemoryOnly }
+
+        return ExistResult::True
+    }
+
+    pub async fn get_cloud(database: &Database, client: &Client) -> Vec<ForumTopic> {
+        let target_name = database.get_database_name();
+
+        let Ok(forum_topic) = TelegramUtils::get_forum_topics(target_name, client).await else {
+            return Vec::new();
+        };
+
+        return forum_topic;
+    }
+
+
+    pub async fn get_memory(database: &Database) -> &Tables {
+        &database.tables
+    }
+
+}
+
+
 pub struct Database {
+    name: String,
     pub channel: Channel,
-    pub tables_fields: TableFields,
-    pub tables_peer: TablePeer,
+    pub tables: Tables,
 }
 
 
 impl Database {
     #[allow(unused)]
-    pub fn new(channel: Channel, tables_fields: TableFields, tables_peer: TablePeer) -> Self {
+    pub fn new(channel: Channel, tables: Tables) -> Self {
+        let mut name = String::new();
+       
+       match &channel {
+           Channel::Channel(c) => name = c.title.to_string(),
+           _ => {}
+       }
+
         Self {
+            name,
             channel,
-            tables_fields,
-            tables_peer,
+            tables
         }
     }
 
@@ -128,11 +305,14 @@ impl Database {
         self.channel = Channel::Channel(channel);
     }
 
-    pub fn get_database_name(&self) -> std::result::Result<String, ()> {
-        match &self.channel {
-            Channel::Channel(c) => return Ok(c.title.to_string()),
-            _ => Err(()),
-        }
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+
+
+    pub fn get_database_name(&self) -> &String {
+        return &self.name
     }
 
     pub async fn get_databases(client: &Client) -> std::result::Result<Vec<tl::types::Channel>, ResultErrs> {
@@ -148,72 +328,24 @@ impl Database {
         return Ok(databases)
     }
 
-    pub fn set_table_fields(&mut self, table_fields: (Arc<str>, Vec<(Arc<str>, Arc<str>)>)) {
-        let _ = &self.tables_fields.insert(table_fields.0, table_fields.1);
-    }
+    pub fn set_table_fields(&mut self, table_fields: (Arc<str>, Vec<(Arc<str>, Arc<str>)>)) -> std::result::Result<(), ()> {
+//        let _ = &self.tables_fields.insert(table_fields.0, table_fields.1);
+        
+        let Ok(table) = self.tables.get_mut_table_by_name(&table_fields.0) else { return Err(()); };
 
-    async fn talbe_exist_in_cloud(&self, client: &Client, table: String) -> bool {
-        let (channel_id, acess_has) = match &self.channel {
-            Channel::Channel(c) => (Some(c.id), c.access_hash),
-            _ => (None, None),
-        };
-
-        let topics = self
-            .tables_peer
-            .values()
-            .map(|item| *item)
-            .collect::<Vec<i32>>();
-
-        let myi = InputPeer::Channel(InputPeerChannel {
-            channel_id: channel_id.unwrap(),
-            access_hash: acess_has.unwrap(),
-        });
-
-        let request = tl::functions::messages::GetForumTopicsById {
-            peer: myi,
-            topics: topics,
-        };
-
-        if let Ok(forum_topic) = client.invoke(&request).await {
-            match forum_topic {
-                ForumTopics::Topics(c) => {
-                    for idx in 0..c.messages.len() {
-                        let topic = match &c.topics[idx] {
-                            ForumTopic::Topic(to) => Some(&to.title),
-                            _ => None,
-                        };
-
-                        if topic.unwrap().contains(&table) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        };
-
-        return false;
-    }
-
-    pub async fn table_exist<T: StoreTableTrait>(&self, client: &Client) -> bool {
-        let table_to_check = T::get_struct();
-
-        let result_in_memory = self.tables_fields.contains_key(table_to_check);
-
-        // let result_in_local_file = match File::search_table(table_to_check) {
-        //     SearchResult::Ok(_) => true,
-        //     _ => false,
-        // };
-
-        let result_in_cloud = self
-            .talbe_exist_in_cloud(client, table_to_check.to_string())
-            .await;
-
-        if result_in_memory  || result_in_cloud {
-            true
-        } else {
-            false
+        for table_field in table_fields.1 {
+            table.insert_field(&table_field.0, &table_field.1);
         }
+
+        
+
+        Ok(())
     }
+
+    pub async  fn table_exist<T: StoreTableTrait>(&self, _: &Client) -> bool {
+        true
+    }
+
 
     async fn exist_cloud(database_name: &String, client: &Client) -> Result<bool> {
         let mut dialogs = client.iter_dialogs();
@@ -232,14 +364,14 @@ impl Database {
     fn exist_memory(databases: &[Database], database_name: &String) -> Result<bool> {
 
         for database in databases {
-           if database.get_database_name().unwrap_or_default().eq(database_name) {
+           if database.get_database_name().eq(database_name) {
                 return Ok(true);
            }
         };
 
         Ok(false)
     }
-    pub async fn exist(databases: &[Database], database_name: &String, client: &Client) -> DatabaseExistResult {
+    pub async fn exist(databases: &[Database], database_name: &String, client: &Client) -> ExistResult {
         // let result_in_local_file = match File::search_base(database_name) {
         //     SearchResult::Ok(_) => true,
         //     _ => false,
@@ -252,27 +384,28 @@ impl Database {
         let result_in_memory = Database::exist_memory(databases, database_name).unwrap_or(false);
         
         if !result_in_cloud && !result_in_memory {
-            return DatabaseExistResult::False;
+            return ExistResult::False;
         }
 
         if !result_in_cloud {
-            return DatabaseExistResult::MemoryOnly;
+            return ExistResult::MemoryOnly;
         }
 
         if !result_in_memory {
-            return DatabaseExistResult::CloudOnly
+            return ExistResult::CloudOnly
         }
 
-        return DatabaseExistResult::True
+        return ExistResult::True
     }
 }
 
 impl Default for Database {
     fn default() -> Self {
+        
         Self {
+            name: String::new(),
             channel: Channel::IsNotSet,
-            tables_fields: std::collections::HashMap::new(),
-            tables_peer: std::collections::HashMap::new(),
+            tables: Tables::default(),
         }
     }
 }

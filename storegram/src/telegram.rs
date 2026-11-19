@@ -1,12 +1,11 @@
 use grammers_client::{Client, InvocationError};
-use grammers_tl_types::enums::Updates;
-use grammers_tl_types::enums::messages::Dialogs;
+use grammers_tl_types::enums::{ForumTopic, InputPeer, Updates};
+use grammers_tl_types::enums::messages::{Dialogs, ForumTopics};
 
+use grammers_tl_types::types::{InputPeerChannel};
 use grammers_tl_types::{self as tl};
 
 use crate::types::{ResultErrs, StoragramErros};
-
-type ForumTopics = Vec<grammers_tl_types::enums::ForumTopic>;
 
 
 pub struct TelegramUtils {}
@@ -60,7 +59,7 @@ impl TelegramUtils {
             Dialogs::Dialogs(d) => (d.dialogs, d.messages, d.chats, d.users, true),
             Dialogs::NotModified(_) => unreachable!("")
         };
-
+        
         let mut databases: Vec<tl::types::Channel> = vec![];
         
         for c in &chats {
@@ -71,19 +70,28 @@ impl TelegramUtils {
                             println!("DATABASE FOUND: {}", c.title);
                             databases.push(c.to_owned());
                         }                    
-
+                        
                     }
                 }
                 _ => {}
             }
         }
-
+        
         
         return Ok(databases);
     }
- 
-    pub async fn get_forum_topics(target_name: &str, client: &Client) -> std::result::Result<ForumTopics, ()> {
-        
+    
+    pub fn get_peer_name_from_topic(topic: &ForumTopic) -> Option<(i32, String)> {
+        if let tl::enums::ForumTopic::Topic(t) = topic {
+            return Some((t.id, t.title.to_string()))
+        }
+
+        return None
+    }
+
+
+
+    pub async fn get_forum_topics(target_name: &str, client: &Client) -> std::result::Result<Vec<tl::enums::ForumTopic>, ()> {        
         let res = TelegramUtils::get_forum(target_name, client).await;
         
         if res.is_err() {
@@ -108,14 +116,14 @@ impl TelegramUtils {
         
         let tl::enums::messages::ForumTopics::Topics(res) = res;
         
-        for topic in &res.topics {
-            if let tl::enums::ForumTopic::Topic(t) = topic {
-                println!(
-                    "id={} | título={} | fechado={} | fixado={} | top_message={}",
-                    t.id, t.title, t.closed, t.pinned, t.top_message
-                );
-            }
-        }
+        // for topic in &res.topics {
+        //     if let tl::enums::ForumTopic::Topic(t) = topic {
+        //         println!(
+        //             "id={} | título={} | fechado={} | fixado={} | top_message={}",
+        //             t.id, t.title, t.closed, t.pinned, t.top_message
+        //         );
+        //     }
+        // }
         
         return Ok(res.topics);        
     }
@@ -131,20 +139,60 @@ impl TelegramUtils {
         
         
         if chats_res.is_err() { println!("{:?}", chats_res.err()); return Err(()) };
-
+        
         let chats = chats_res.unwrap();
         let tl::enums::messages::ChatFull::Full(chat) = chats;
-
+        
         match chat.full_chat {
             tl::enums::ChatFull::ChannelFull(f) => {
                 return Ok(f)
             }   
             _ => {}
         }
-                        
+        
         Err(())
     }
     
+    pub async fn get_forum_topics_by_id(topics: Vec<i32>, channel_id: i64, acess_hash: i64, client: &Client) -> std::result::Result<tl::types::messages::ForumTopics, ()> {
+        
+        let myi = InputPeer::Channel(InputPeerChannel {
+            channel_id: channel_id,
+            access_hash: acess_hash,
+        });
+        
+        let request = tl::functions::messages::GetForumTopicsById {
+            peer: myi,
+            topics: topics,
+        };
+        
+        let Ok(forum_topic) = client.invoke(&request).await else {
+            println!("NEMHUM FORUM ENCONTRADO");
+            return Err(());
+        };
+        
+        match forum_topic {
+            ForumTopics::Topics(c) => {
+                return Ok(c);
+            }
+        }
+        
+    }
+    
+    pub async fn forum_topic_exist(topic_name: &str, forum_name: &str, client: &Client) -> bool {
+        
+        let Ok(topics) = TelegramUtils::get_forum_topics(forum_name, client).await else {
+            return false;
+        };
+        
+        for topic in &topics {
+            if let tl::enums::ForumTopic::Topic(t) = topic {
+                if t.title.eq(topic_name) { return true; }
+            }
+        }
+        
+        
+        return false
+    }
     
     pub async fn create_forum(client: &Client, forum_name: &str) -> std::result::Result<tl::types::Channel, StoragramErros> {
         if client.is_authorized().await.unwrap_or(false) {
@@ -220,60 +268,60 @@ impl TelegramUtils {
             println!("MATCHED - Forum Criado")  
         })
     }
-
-    pub fn match_topic_create<F>(enums: Updates, f: F) -> std::result::Result<(), StoragramErros> where F: Fn() {
-    match enums {
-        tl::enums::Updates::Updates(updates) => {
-            for update in updates.updates {
-                match update {
-                    tl::enums::Update::NewChannelMessage(new_msg) => {
-                        match new_msg.message {
-                            tl::enums::Message::Service(service) => {
-                                match service.action {
-                                    tl::enums::MessageAction::TopicCreate(_) => {
-                                        if service.from_id.is_some() {
-                                            f()
-                                            // let _ = &self.databases
-                                            // [current_database_index]
-                                            // .tables_peer
-                                            // .insert(
-                                            //     Arc::from(struct_name),
-                                            //     service.id,
-                                            // );
-                                            
-                                            // let fields_str = fields
-                                            // .iter()
-                                            // .map(|item| {
-                                            //     String::from(format!(
-                                            //         "{}: {}",
-                                            //         item.0, item.1
-                                            //     ))
-                                            // })
-                                            // .collect::<Vec<_>>()
-                                            // .join(",");
-                                            
-                                            // File::insert_table(
-                                            //     struct_name.to_string(),
-                                            //     fields_str,
-                                            //     service.id.to_string(),
-                                            // );
-                                        } else {
-                                            return Err(StoragramErros::default(ResultErrs::TablePeerNotFound, line!().to_string(), file!().to_string()));
-                                        };
+    
+    fn match_topic_create<F>(enums: Updates, f: F) -> std::result::Result<(), StoragramErros> where F: Fn() {
+        match enums {
+            tl::enums::Updates::Updates(updates) => {
+                for update in updates.updates {
+                    match update {
+                        tl::enums::Update::NewChannelMessage(new_msg) => {
+                            match new_msg.message {
+                                tl::enums::Message::Service(service) => {
+                                    match service.action {
+                                        tl::enums::MessageAction::TopicCreate(_) => {
+                                            if service.from_id.is_some() {
+                                                f()
+                                                // let _ = &self.databases
+                                                // [current_database_index]
+                                                // .tables_peer
+                                                // .insert(
+                                                //     Arc::from(struct_name),
+                                                //     service.id,
+                                                // );
+                                                
+                                                // let fields_str = fields
+                                                // .iter()
+                                                // .map(|item| {
+                                                //     String::from(format!(
+                                                //         "{}: {}",
+                                                //         item.0, item.1
+                                                //     ))
+                                                // })
+                                                // .collect::<Vec<_>>()
+                                                // .join(",");
+                                                
+                                                // File::insert_table(
+                                                //     struct_name.to_string(),
+                                                //     fields_str,
+                                                //     service.id.to_string(),
+                                                // );
+                                            } else {
+                                                return Err(StoragramErros::default(ResultErrs::TablePeerNotFound, line!().to_string(), file!().to_string()));
+                                            };
+                                        }
+                                        _ => {}
                                     }
-                                    _ => {}
                                 }
+                                _ => {}
                             }
-                            _ => {}
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
+            _ => {}
         }
-        _ => {}
+        return Ok(());
     }
-    return Ok(());
-}
-
+    
 }
